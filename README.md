@@ -7,6 +7,7 @@ go install github.com/getlantern/redistrict
 
 Then you can view the command line options as follows:
 
+```
 $ ./redistrict
 A program for migrating redis databases particularly when you don't have SSH
 access to the destination machine. This also solves edge cases such as hashes
@@ -31,3 +32,4 @@ Flags:
       --sslsrc           Set TLS/SSL flag for the source redis
 
 Use "redistrict [command] --help" for more information about a command.
+```
