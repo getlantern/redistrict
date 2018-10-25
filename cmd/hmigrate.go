@@ -51,9 +51,9 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 	fmt.Println("Starting to read and write...")
 	var wg sync.WaitGroup
 	go read(scan, ch, &wg)
-	go write(key, set, ch, bar, &wg)
+	write(key, set, ch, bar, &wg)
 
-	wg.Wait()
+	//wg.Wait()
 
 	/*
 		var cursor uint64
