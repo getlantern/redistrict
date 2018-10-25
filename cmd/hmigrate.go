@@ -46,7 +46,8 @@ func hmigrateWith(scan hscan, set hset) {
 		n += len(keyvals)
 
 		hmap := keyvalsToMap(keyvals)
-		set(key, hmap)
+		status, err := set(key, hmap).Result()
+		fmt.Printf("Status of set: %v\n", status)
 		if cursor == 0 {
 			break
 		}
