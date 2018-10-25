@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
 
-	"github.com/gosuri/uiprogress"
+	pb "gopkg.in/cheggaaa/pb.v2"
 )
 
 // hmigrateCmd is for migrating a particular hash to a new redis.
@@ -38,14 +39,11 @@ func hmigrate(cmd *cobra.Command, args []string) {
 
 func hmigrateWith(scan hscan, set hset, hl hlen) {
 	fmt.Printf("hmigrate called with key %+v\n", key)
-
-	uiprogress.Start()
-	bar := uiprogress.AddBar(100)
-
-	bar.AppendCompleted()
-	bar.PrependElapsed()
-
 	length := hl(key).Val()
+	var bar *pb.ProgressBar
+	if length > 0 {
+		bar = pb.StartNew(int(length))
+	}
 
 	var cursor uint64
 	var n int64
@@ -59,24 +57,27 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 		cur := len(keyvals)
 		n += int64(cur)
 
-		if length > 0 {
-			bar.Set(int(n / length))
+		if length > 0 && bar != nil {
+			bar.Add(cur / 2)
 		}
 
 		hmap := keyvalsToMap(keyvals)
 		status, err := set(key, hmap).Result()
-		fmt.Printf("Status of set: %v\n", status)
+		if err != nil {
+			fmt.Printf("Error setting values on destination %v", err)
+			fmt.Printf("Status: %v", status)
+		}
 		if cursor == 0 {
 			break
 		}
+		time.Sleep(time.Millisecond * 2000)
 	}
-
-	fmt.Printf("found %d keys\n", n)
+	if bar != nil {
+		bar.Finish()
+	}
 }
 
 func keyvalsToMap(keyvals []string) map[string]interface{} {
-	fmt.Printf("Got %v keyvals\n", len(keyvals))
-
 	// This is a little quirky. Redis scans return keys followed by values, so to create a map
 	// for a subsequent hmset call we have to iterate one forward in the array to map the value.
 	hmap := make(map[string]interface{})
