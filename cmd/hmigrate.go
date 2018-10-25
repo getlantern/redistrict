@@ -19,11 +19,13 @@ uses HSCAN to migrate large hashes.`,
 }
 
 var key string
+var count int
 
 func init() {
 	rootCmd.AddCommand(hmigrateCmd)
 	hmigrateCmd.Flags().StringVarP(&key, "key", "k", "", "The key of the hash to migrate")
 	hmigrateCmd.MarkFlagRequired("key")
+	hmigrateCmd.Flags().IntVarP(&count, "count", "", 1000, "The number of hash entries to scan on each pass")
 }
 
 type hscan func(key string, cursor uint64, match string, count int64) *redis.ScanCmd
@@ -38,40 +40,79 @@ func hmigrate(cmd *cobra.Command, args []string) {
 
 func hmigrateWith(scan hscan, set hset, hl hlen) {
 	length := hl(key).Val()
-	var bar *pb.ProgressBar
-	if length > 0 {
-		bar = pb.StartNew(int(length))
-	}
+	bar := pb.StartNew(int(length))
 
+	ch := make(chan map[string]interface{})
+	go read(scan, ch)
+	go write(key, set, ch, bar)
+
+	/*
+		var cursor uint64
+		var n int64
+		for {
+			var keyvals []string
+			var err error
+			keyvals, cursor, err = scan(key, cursor, "", int64(count)).Result()
+			if err != nil {
+				panic(err)
+			}
+			cur := len(keyvals)
+			n += int64(cur)
+
+			if length > 0 && bar != nil {
+				bar.Add(cur / 2)
+			}
+
+			hmap := keyvalsToMap(keyvals)
+			status, err := set(key, hmap).Result()
+			if err != nil {
+				fmt.Printf("Error setting values on destination %v", err)
+				fmt.Printf("Status: %v", status)
+			}
+			if cursor == 0 {
+				break
+			}
+		}
+		if bar != nil {
+			bar.Finish()
+		}
+	*/
+}
+
+func read(scan hscan, ch chan map[string]interface{}) {
 	var cursor uint64
 	var n int64
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = scan(key, cursor, "", 200000).Result()
+		keyvals, cursor, err = scan(key, cursor, "", int64(count)).Result()
 		if err != nil {
 			panic(err)
 		}
 		cur := len(keyvals)
 		n += int64(cur)
 
-		if length > 0 && bar != nil {
-			bar.Add(cur / 2)
-		}
-
 		hmap := keyvalsToMap(keyvals)
-		status, err := set(key, hmap).Result()
-		if err != nil {
-			fmt.Printf("Error setting values on destination %v", err)
-			fmt.Printf("Status: %v", status)
-		}
+		ch <- hmap
+
 		if cursor == 0 {
 			break
 		}
 	}
-	if bar != nil {
-		bar.Finish()
+}
+
+func write(key string, set hset, ch chan map[string]interface{}, bar *pb.ProgressBar) {
+	for hmap := range ch {
+		status, err := set(key, hmap).Result()
+		if err != nil {
+			fmt.Printf("Error setting values on destination %v", err)
+			fmt.Printf("Status: %v", status)
+		} else {
+			bar.Add(len(hmap))
+		}
 	}
+
+	bar.Finish()
 }
 
 func keyvalsToMap(keyvals []string) map[string]interface{} {
