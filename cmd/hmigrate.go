@@ -52,7 +52,7 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = scan(key, cursor, "", 1000).Result()
+		keyvals, cursor, err = scan(key, cursor, "", 100000).Result()
 		if err != nil {
 			panic(err)
 		}
