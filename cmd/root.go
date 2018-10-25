@@ -1,8 +1,13 @@
 package cmd
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
+	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
@@ -16,8 +21,8 @@ var dst string
 var srcauth string
 var dstauth string
 
-var sslsrc bool
-var ssldst bool
+var sslsrcCert string
+var ssldstCert string
 
 var db int
 
@@ -52,8 +57,8 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVarP(&srcauth, "srcauth", "", "", "Source redis password")
 	rootCmd.PersistentFlags().StringVarP(&dstauth, "dstauth", "", "", "Destination redis password")
-	rootCmd.PersistentFlags().BoolVarP(&sslsrc, "sslsrc", "", false, "Set TLS/SSL flag for the source redis")
-	rootCmd.PersistentFlags().BoolVarP(&ssldst, "ssldst", "", false, "Set TLS/SSL flag for the destination redis")
+	rootCmd.PersistentFlags().StringVarP(&sslsrcCert, "sslsrcCert", "", "", "SSL certificate path for source redis, if any.")
+	rootCmd.PersistentFlags().StringVarP(&ssldstCert, "ssldstCert", "", "", "SSL certificate path for destination redis, if any.")
 	rootCmd.PersistentFlags().IntVarP(&db, "db", "", 0, "Redis db number, defaults to 0")
 
 	rootCmd.PersistentFlags().BoolVarP(&flushdst, "flushdst", "", false, "Flush the destination db before doing anything")
@@ -61,20 +66,38 @@ func init() {
 
 // initRedis creates initial redis connections.
 func initRedis() {
-
-	sclient = redis.NewClient(&redis.Options{
-		Addr:     src,
-		Password: srcauth,
-		DB:       db,
-	})
-
-	dclient = redis.NewClient(&redis.Options{
-		Addr:     dst,
-		Password: dstauth,
-		DB:       db,
-	})
+	sclient = newClient(src, srcauth, db, sslsrcCert)
+	dclient = newClient(dst, dstauth, db, ssldstCert)
 
 	if flushdst {
 		dclient.FlushDB()
+	}
+}
+
+func newClient(addr, password string, db int, sslCert string) *redis.Client {
+	options := &redis.Options{
+		Addr:         addr,
+		Password:     password,
+		DB:           db,
+		ReadTimeout:  80 * time.Second,
+		WriteTimeout: 80 * time.Second,
+	}
+	if sslCert != "" {
+		options.TLSConfig = tlsConfig(sslCert)
+	}
+	return redis.NewClient(options)
+}
+
+func tlsConfig(certPath string) *tls.Config {
+	cert, err := ioutil.ReadFile(certPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	srcCertPool := x509.NewCertPool()
+	srcCertPool.AppendCertsFromPEM(cert)
+
+	return &tls.Config{
+		RootCAs: srcCertPool,
 	}
 }
