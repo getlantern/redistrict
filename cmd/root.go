@@ -70,7 +70,6 @@ func initRedis() {
 	dclient = newClient(dst, dstauth, db, ssldstCert)
 
 	if flushdst {
-		fmt.Println("Flushing destination database...")
 		dclient.FlushDB()
 	}
 }

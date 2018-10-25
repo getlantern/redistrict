@@ -39,15 +39,11 @@ func hmigrate(cmd *cobra.Command, args []string) {
 }
 
 func hmigrateWith(scan hscan, set hset, hl hlen) {
-	fmt.Printf("Starting migration...reading source length\n")
 	length := hl(key).Val()
-
-	fmt.Printf("Length %v\n", length)
 	bar := pb.StartNew(int(length))
 
 	ch := make(chan map[string]interface{})
 
-	fmt.Println("Starting to read and write...")
 	go read(scan, ch)
 	write(key, set, ch, bar)
 }
