@@ -90,6 +90,7 @@ func read(scan hscan, ch chan map[string]interface{}) {
 			panic(err)
 		}
 		cur := len(keyvals)
+		fmt.Printf("Read %v keyvals\n", cur)
 		n += int64(cur)
 
 		hmap := keyvalsToMap(keyvals)
