@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
@@ -49,46 +48,11 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 	ch := make(chan map[string]interface{})
 
 	fmt.Println("Starting to read and write...")
-	var wg sync.WaitGroup
-	go read(scan, ch, &wg)
-	write(key, set, ch, bar, &wg)
-
-	//wg.Wait()
-
-	/*
-		var cursor uint64
-		var n int64
-		for {
-			var keyvals []string
-			var err error
-			keyvals, cursor, err = scan(key, cursor, "", int64(count)).Result()
-			if err != nil {
-				panic(err)
-			}
-			cur := len(keyvals)
-			n += int64(cur)
-
-			if length > 0 && bar != nil {
-				bar.Add(cur / 2)
-			}
-
-			hmap := keyvalsToMap(keyvals)
-			status, err := set(key, hmap).Result()
-			if err != nil {
-				fmt.Printf("Error setting values on destination %v", err)
-				fmt.Printf("Status: %v", status)
-			}
-			if cursor == 0 {
-				break
-			}
-		}
-		if bar != nil {
-			bar.Finish()
-		}
-	*/
+	go read(scan, ch)
+	write(key, set, ch, bar)
 }
 
-func read(scan hscan, ch chan map[string]interface{}, wg *sync.WaitGroup) {
+func read(scan hscan, ch chan map[string]interface{}) {
 	var cursor uint64
 	var n int64
 	for {
@@ -99,11 +63,9 @@ func read(scan hscan, ch chan map[string]interface{}, wg *sync.WaitGroup) {
 			panic(err)
 		}
 		cur := len(keyvals)
-		fmt.Printf("Read %v keyvals\n", cur)
 		n += int64(cur)
 
 		hmap := keyvalsToMap(keyvals)
-		wg.Add(1)
 		ch <- hmap
 
 		if cursor == 0 {
@@ -113,7 +75,7 @@ func read(scan hscan, ch chan map[string]interface{}, wg *sync.WaitGroup) {
 	}
 }
 
-func write(key string, set hset, ch chan map[string]interface{}, bar *pb.ProgressBar, wg *sync.WaitGroup) {
+func write(key string, set hset, ch chan map[string]interface{}, bar *pb.ProgressBar) {
 	for hmap := range ch {
 		status, err := set(key, hmap).Result()
 		if err != nil {
@@ -122,7 +84,6 @@ func write(key string, set hset, ch chan map[string]interface{}, bar *pb.Progres
 		} else {
 			bar.Add(len(hmap))
 		}
-		wg.Done()
 	}
 	bar.Finish()
 }
