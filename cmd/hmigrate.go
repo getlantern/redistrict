@@ -38,7 +38,6 @@ func hmigrate(cmd *cobra.Command, args []string) {
 }
 
 func hmigrateWith(scan hscan, set hset, hl hlen) {
-	fmt.Printf("hmigrate called with key %+v\n", key)
 	length := hl(key).Val()
 	var bar *pb.ProgressBar
 	if length > 0 {
@@ -50,7 +49,7 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = scan(key, cursor, "", 100000).Result()
+		keyvals, cursor, err = scan(key, cursor, "", 10000000).Result()
 		if err != nil {
 			panic(err)
 		}
