@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
@@ -49,7 +48,7 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = scan(key, cursor, "", 10000000).Result()
+		keyvals, cursor, err = scan(key, cursor, "", 200000).Result()
 		if err != nil {
 			panic(err)
 		}
@@ -69,7 +68,6 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 		if cursor == 0 {
 			break
 		}
-		time.Sleep(time.Millisecond * 2000)
 	}
 	if bar != nil {
 		bar.Finish()
