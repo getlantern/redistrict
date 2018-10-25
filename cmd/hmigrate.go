@@ -5,6 +5,8 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
+
+	"github.com/gosuri/uiprogress"
 )
 
 // hmigrateCmd is for migrating a particular hash to a new redis.
@@ -28,14 +30,25 @@ type hscan func(key string, cursor uint64, match string, count int64) *redis.Sca
 
 type hset func(key string, hmap map[string]interface{}) *redis.StatusCmd
 
+type hlen func(key string) *redis.IntCmd
+
 func hmigrate(cmd *cobra.Command, args []string) {
-	hmigrateWith(sclient.HScan, dclient.HMSet)
+	hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen)
 }
 
-func hmigrateWith(scan hscan, set hset) {
+func hmigrateWith(scan hscan, set hset, hl hlen) {
 	fmt.Printf("hmigrate called with key %+v\n", key)
+
+	uiprogress.Start()
+	bar := uiprogress.AddBar(100)
+
+	bar.AppendCompleted()
+	bar.PrependElapsed()
+
+	length := hl(key).Val()
+
 	var cursor uint64
-	var n int
+	var n int64
 	for {
 		var keyvals []string
 		var err error
@@ -43,7 +56,12 @@ func hmigrateWith(scan hscan, set hset) {
 		if err != nil {
 			panic(err)
 		}
-		n += len(keyvals)
+		cur := len(keyvals)
+		n += int64(cur)
+
+		if length > 0 {
+			bar.Set(int(n / length))
+		}
 
 		hmap := keyvalsToMap(keyvals)
 		status, err := set(key, hmap).Result()

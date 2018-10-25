@@ -15,7 +15,10 @@ func TestHMigrate(t *testing.T) {
 	set := func(key string, hmap map[string]interface{}) *redis.StatusCmd {
 		return &redis.StatusCmd{}
 	}
-	hmigrateWith(scan, set)
+	length := func(key string) *redis.IntCmd {
+		return &redis.IntCmd{}
+	}
+	hmigrateWith(scan, set, length)
 }
 
 func TestKeyvalsToMap(t *testing.T) {
