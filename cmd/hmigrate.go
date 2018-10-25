@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
@@ -48,8 +49,11 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 	ch := make(chan map[string]interface{})
 
 	fmt.Println("Starting to read and write...")
-	go read(scan, ch)
-	go write(key, set, ch, bar)
+	var wg sync.WaitGroup
+	go read(scan, ch, &wg)
+	go write(key, set, ch, bar, &wg)
+
+	wg.Wait()
 
 	/*
 		var cursor uint64
@@ -84,7 +88,7 @@ func hmigrateWith(scan hscan, set hset, hl hlen) {
 	*/
 }
 
-func read(scan hscan, ch chan map[string]interface{}) {
+func read(scan hscan, ch chan map[string]interface{}, wg *sync.WaitGroup) {
 	var cursor uint64
 	var n int64
 	for {
@@ -99,15 +103,17 @@ func read(scan hscan, ch chan map[string]interface{}) {
 		n += int64(cur)
 
 		hmap := keyvalsToMap(keyvals)
+		wg.Add(1)
 		ch <- hmap
 
 		if cursor == 0 {
+			close(ch)
 			break
 		}
 	}
 }
 
-func write(key string, set hset, ch chan map[string]interface{}, bar *pb.ProgressBar) {
+func write(key string, set hset, ch chan map[string]interface{}, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	for hmap := range ch {
 		status, err := set(key, hmap).Result()
 		if err != nil {
@@ -116,8 +122,8 @@ func write(key string, set hset, ch chan map[string]interface{}, bar *pb.Progres
 		} else {
 			bar.Add(len(hmap))
 		}
+		wg.Done()
 	}
-
 	bar.Finish()
 }
 
