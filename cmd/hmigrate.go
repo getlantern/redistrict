@@ -32,11 +32,12 @@ func hmigrate(cmd *cobra.Command, args []string) {
 		var err error
 		keyvals, cursor, err = sclient.HScan(key, cursor, "", 100).Result()
 
-		//keys, cursor, err = sclient.Scan(cursor, "", 100).Result()
 		if err != nil {
 			panic(err)
 		}
 		n += len(keyvals)
+
+		fmt.Printf("Got %v keyvals", n)
 
 		// This is a little quirky. Redis scans return keys followed by values, so to create a map
 		// for a subsequent hmset call we have to iterate one forward in the array to map the value.
