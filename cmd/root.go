@@ -11,12 +11,16 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
+	pb "gopkg.in/cheggaaa/pb.v2"
 )
+
+type migrator struct {
+}
 
 var cfgFile string
 
-var src string
-var dst string
+var src = "127.0.0.1:6379"
+var dst = "127.0.0.1:6379"
 
 var srcauth string
 var dstauth string
@@ -38,6 +42,7 @@ var rootCmd = &cobra.Command{
 	Long: `A program for migrating redis databases particularly when you don't have SSH
 access to the destination machine. This also solves edge cases such as hashes
 that are too big for DUMP, RESTORE, and MIGRATE (bigger than 512MB).`,
+	Run: migrate,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -81,6 +86,7 @@ func newClient(addr, password string, db int, sslCert string) *redis.Client {
 		DB:           db,
 		ReadTimeout:  80 * time.Second,
 		WriteTimeout: 80 * time.Second,
+		DialTimeout:  12 * time.Second,
 	}
 	if sslCert != "" {
 		options.TLSConfig = tlsConfig(sslCert)
@@ -100,4 +106,87 @@ func tlsConfig(certPath string) *tls.Config {
 	return &tls.Config{
 		RootCAs: srcCertPool,
 	}
+}
+
+type scan func(cursor uint64, match string, count int64) *redis.ScanCmd
+
+type klen func() *redis.IntCmd
+
+func migrate(cmd *cobra.Command, args []string) {
+	m := &migrator{}
+	m.migrateWith(sclient.Scan, sclient.DBSize)
+}
+
+func (m *migrator) migrateWith(sc scan, kl klen) {
+	length, err := kl().Result()
+	if err != nil {
+		panic(err)
+	}
+	bar := pb.StartNew(int(length))
+
+	ch := make(chan []string)
+
+	go m.read(sc, ch)
+	m.write(ch, bar)
+}
+
+func (m *migrator) read(sc scan, ch chan []string) {
+	var cursor uint64
+	var n int64
+	for {
+		var keyvals []string
+		var err error
+		keyvals, cursor, err = sc(cursor, "", 4000).Result()
+		if err != nil {
+			panic(err)
+		}
+		cur := len(keyvals)
+		n += int64(cur)
+
+		ch <- keyvals
+
+		if cursor == 0 {
+			close(ch)
+			break
+		}
+	}
+}
+
+func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
+	type ktv struct {
+		key   string
+		ttl   *redis.DurationCmd
+		value *redis.StringCmd
+	}
+	for keyvals := range ch {
+		ktvs := make([]ktv, 0)
+		pipeline := sclient.Pipeline()
+		for i := 0; i < len(keyvals); i++ {
+			key := keyvals[i]
+			ttlCmd := pipeline.PTTL(key)
+			dumpCmd := pipeline.Dump(key)
+			ktvs = append(ktvs, ktv{key: key, ttl: ttlCmd, value: dumpCmd})
+		}
+		pipeline.Exec()
+
+		dpipeline := dclient.Pipeline()
+		for _, ktv := range ktvs {
+			ttl, err := ktv.ttl.Result()
+			if err != nil {
+				panic(err)
+			}
+			value, err := ktv.value.Result()
+			if err != nil {
+				panic(err)
+			}
+			dpipeline.Restore(ktv.key, ttl, value)
+		}
+
+		_, err := dpipeline.Exec()
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	bar.Finish()
 }

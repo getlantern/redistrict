@@ -18,7 +18,8 @@ func TestHMigrate(t *testing.T) {
 	length := func(key string) *redis.IntCmd {
 		return &redis.IntCmd{}
 	}
-	hmigrateWith(scan, set, length)
+	hm := &hmigrator{}
+	hm.hmigrateWith(scan, set, length)
 }
 
 func TestKeyvalsToMap(t *testing.T) {
@@ -33,6 +34,7 @@ func TestKeyvalsToMap(t *testing.T) {
 		keyvals = append(keyvals, "val")
 	}
 
-	mapped := keyvalsToMap(keyvals)
+	hm := &hmigrator{}
+	mapped := hm.keyvalsToMap(keyvals)
 	assert.Equal(t, keyvalsMap, mapped)
 }
