@@ -28,9 +28,11 @@ var dstauth string
 var sslsrcCert string
 var ssldstCert string
 
-var db int
+var srcdb int
+var dstdb int
 
 var flushdst bool
+var flushsrc bool
 
 var sclient *redis.Client
 var dclient *redis.Client
@@ -64,18 +66,23 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&dstauth, "dstauth", "", "", "Destination redis password")
 	rootCmd.PersistentFlags().StringVarP(&sslsrcCert, "sslsrcCert", "", "", "SSL certificate path for source redis, if any.")
 	rootCmd.PersistentFlags().StringVarP(&ssldstCert, "ssldstCert", "", "", "SSL certificate path for destination redis, if any.")
-	rootCmd.PersistentFlags().IntVarP(&db, "db", "", 0, "Redis db number, defaults to 0")
+	rootCmd.PersistentFlags().IntVarP(&srcdb, "srcdb", "", 0, "Redis db number, defaults to 0")
+	rootCmd.PersistentFlags().IntVarP(&dstdb, "dstdb", "", 0, "Redis db number, defaults to 0")
 
 	rootCmd.PersistentFlags().BoolVarP(&flushdst, "flushdst", "", false, "Flush the destination db before doing anything")
 }
 
 // initRedis creates initial redis connections.
 func initRedis() {
-	sclient = newClient(src, srcauth, db, sslsrcCert)
-	dclient = newClient(dst, dstauth, db, ssldstCert)
+	sclient = newClient(src, srcauth, srcdb, sslsrcCert)
+	dclient = newClient(dst, dstauth, dstdb, ssldstCert)
 
 	if flushdst {
 		dclient.FlushDB()
+	}
+
+	if flushsrc {
+		sclient.FlushDB()
 	}
 }
 

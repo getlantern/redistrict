@@ -9,21 +9,21 @@ import (
 	pb "gopkg.in/cheggaaa/pb.v2"
 )
 
-// hmigrateCmd is for migrating a particular hash to a new redis.
-var hmigrateCmd = &cobra.Command{
-	Use:   "hmigrate",
-	Short: "Migrate a large hash at the specified key",
-	Long: `Redis DUMP, RESTORE, and MIGRATE commands do not support hashes larger than 512MB. This
-uses HSCAN to migrate large hashes.`,
-	Run: hmigrate,
-}
-
 type hmigrator struct {
 	key   string
 	count int
 }
 
 var hm = &hmigrator{}
+
+// hmigrateCmd is for migrating a particular hash to a new redis.
+var hmigrateCmd = &cobra.Command{
+	Use:   "hmigrate",
+	Short: "Migrate a large hash at the specified key",
+	Long: `Redis DUMP, RESTORE, and MIGRATE commands do not support hashes larger than 512MB. This
+uses HSCAN to migrate large hashes.`,
+	Run: hm.hmigrate,
+}
 
 func init() {
 	rootCmd.AddCommand(hmigrateCmd)
@@ -38,8 +38,7 @@ type hset func(key string, hmap map[string]interface{}) *redis.StatusCmd
 
 type hlen func(key string) *redis.IntCmd
 
-func hmigrate(cmd *cobra.Command, args []string) {
-
+func (hm *hmigrator) hmigrate(cmd *cobra.Command, args []string) {
 	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen)
 }
 

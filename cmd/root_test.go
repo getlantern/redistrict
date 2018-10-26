@@ -11,7 +11,10 @@ import (
 // TestMigrate tests migration from one database to another.
 func TestMigrate(t *testing.T) {
 	flushdst = true
-	dst = "127.0.0.1:7777"
+	flushsrc = true
+
+	// Just use a separate database on the single redis instance.
+	dstdb = 1
 	initRedis()
 
 	for i := 0; i < 20; i++ {

@@ -1,25 +1,43 @@
 package cmd
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 
-	"github.com/go-redis/redis"
 	"github.com/stretchr/testify/assert"
 )
 
+// TestHMigrate tests the hmigrate method. Note you either need to run this inside circleci, which
+// creates a redis instance inside docker, or you need to have a locally running redis on the
+// default port.
 func TestHMigrate(t *testing.T) {
-	scan := func(key string, cursor uint64, match string, count int64) *redis.ScanCmd {
-		return &redis.ScanCmd{}
+	flushdst = true
+	flushsrc = true
+
+	// Just use a separate database on the single redis instance.
+	dstdb = 1
+	initRedis()
+
+	testkey := "hkey1"
+	for i := 0; i < 10000; i++ {
+		err := sclient.HSet(testkey, fmt.Sprintf("field-%d", i), fmt.Sprintf("value-%d", i)).Err()
+		if err != nil {
+			panic(err)
+		}
 	}
-	set := func(key string, hmap map[string]interface{}) *redis.StatusCmd {
-		return &redis.StatusCmd{}
+	hm := &hmigrator{
+		key: testkey,
 	}
-	length := func(key string) *redis.IntCmd {
-		return &redis.IntCmd{}
+	hm.hmigrate(nil, nil)
+
+	for i := 0; i < 10000; i++ {
+		val, err := dclient.HGet(testkey, fmt.Sprintf("field-%d", i)).Result()
+		if err != nil {
+			panic(err)
+		}
+		assert.Equal(t, fmt.Sprintf("value-%d", i), val)
 	}
-	hm := &hmigrator{}
-	hm.hmigrateWith(scan, set, length)
 }
 
 func TestKeyvalsToMap(t *testing.T) {
