@@ -81,6 +81,7 @@ func initRedis() {
 		dclient.FlushDB()
 	}
 
+	// Note this is only exposed for tests to avoid letting the caller do something stupid...
 	if flushsrc {
 		sclient.FlushDB()
 	}
