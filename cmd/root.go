@@ -11,8 +11,11 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 	pb "gopkg.in/cheggaaa/pb.v2"
 )
+
+var logger *zap.SugaredLogger
 
 type migrator struct {
 }
@@ -57,6 +60,8 @@ func Execute() {
 }
 
 func init() {
+	dev, _ := zap.NewDevelopment()
+	logger = dev.Sugar()
 	cobra.OnInitialize(initRedis)
 
 	rootCmd.PersistentFlags().StringVarP(&src, "src", "s", "127.0.0.1:6379", "Source redis host IP/name")
@@ -182,6 +187,9 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			ttl, err := ktv.ttl.Result()
 			if err != nil {
 				panic(err)
+			}
+			if ttl == 0 {
+				logger.Errorf("TTL is <= 0 for key %v", ktv.key)
 			}
 			value, err := ktv.value.Result()
 			if err != nil {
