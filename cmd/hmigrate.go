@@ -38,8 +38,17 @@ type hset func(key string, hmap map[string]interface{}) *redis.StatusCmd
 
 type hlen func(key string) *redis.IntCmd
 
-func (hm *hmigrator) hmigrate(cmd *cobra.Command, args []string) {
+func hmigrateKey(k string) {
+	hm.key = k
+	hm.migrate()
+}
+
+func (hm *hmigrator) migrate() {
 	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen)
+}
+
+func (hm *hmigrator) hmigrate(cmd *cobra.Command, args []string) {
+	hm.migrate()
 }
 
 func (hm *hmigrator) hmigrateWith(scan hscan, set hset, hl hlen) {

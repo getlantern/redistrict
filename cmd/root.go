@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	pb "gopkg.in/cheggaaa/pb.v2"
 )
@@ -64,6 +66,7 @@ func init() {
 	logger = dev.Sugar()
 	cobra.OnInitialize(initRedis)
 
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.redistrict.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&src, "src", "s", "127.0.0.1:6379", "Source redis host IP/name")
 	rootCmd.PersistentFlags().StringVarP(&dst, "dst", "d", "127.0.0.1:6379", "Destination redis host IP/name")
 
@@ -187,7 +190,8 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		for i := 0; i < n; i++ {
 			key := keyvals[i]
 			if _, ok := hmigrated[key]; ok {
-				logger.Infof("Not directly migrating large hash at %v", key)
+				logger.Infof("Separately migrating large hash at %v", key)
+				hmigrateKey(key)
 				continue
 			}
 			ttlCmd := spipeline.PTTL(key)
@@ -222,4 +226,30 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 	}
 
 	bar.Finish()
+}
+
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	if cfgFile != "" {
+		// Use config file from the flag.
+		viper.SetConfigFile(cfgFile)
+	} else {
+		// Find home directory.
+		home, err := homedir.Dir()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		// Search config in home directory with name ".redistrict" (without extension).
+		viper.AddConfigPath(home)
+		viper.SetConfigName(".redistrict")
+	}
+
+	viper.AutomaticEnv() // read in environment variables that match
+
+	// If a config file is found, read it in.
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Println("Using config file:", viper.ConfigFileUsed())
+	}
 }
