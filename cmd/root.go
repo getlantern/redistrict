@@ -189,7 +189,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 				panic(err)
 			}
 			if ttl < 0 {
-				logger.Errorf("TTL is < 0 for key %v", ktv.key)
+				//logger.Errorf("TTL is < 0 for key %v", ktv.key)
 				//panic("TTL is " + ttl.String())
 				ttl = 0
 			}
