@@ -171,6 +171,14 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		ttlCmd   *redis.DurationCmd
 		valueCmd *redis.StringCmd
 	}
+
+	hmigrated := map[string]bool{
+		"user->locale":     true,
+		"log-errors":       true,
+		"user->created-at": true,
+		"user->token":      true,
+	}
+
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
 		spipeline := sclient.Pipeline()
@@ -178,6 +186,10 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		n := len(keyvals)
 		for i := 0; i < n; i++ {
 			key := keyvals[i]
+			if _, ok := hmigrated[key]; ok {
+				logger.Infof("Not directly migrating large hash at %v", key)
+				continue
+			}
 			ttlCmd := spipeline.PTTL(key)
 			dumpCmd := spipeline.Dump(key)
 			ktvs = append(ktvs, ktv{key: key, ttlCmd: ttlCmd, valueCmd: dumpCmd})
@@ -190,21 +202,21 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			if err != nil {
 				panic(fmt.Sprintf("Error reading key %v: %v", ktv.key, err))
 			}
+			// A TTL of less than 0 simply means there is no TTL. Specifying 0 when
+			// we call RESTORE similarly sets no TTL.
 			if ttl < 0 {
-				//logger.Errorf("TTL is < 0 for key %v", ktv.key)
-				//panic("TTL is " + ttl.String())
 				ttl = 0
 			}
 			value, err := ktv.valueCmd.Result()
 			if err != nil {
-				panic(err)
+				panic(fmt.Sprintf("Error reading value for key %v: %v", ktv.key, err))
 			}
 			dpipeline.Restore(ktv.key, ttl, value)
 		}
 
 		_, err := dpipeline.Exec()
 		if err != nil {
-			panic(err)
+			panic(fmt.Sprintf("Error execing pipeline: %v", err))
 		}
 		bar.Add(n)
 	}
