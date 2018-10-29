@@ -174,15 +174,15 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
 		spipeline := sclient.Pipeline()
-		logger.Infof("Reading %v keys", len(keyvals))
-		for i := 0; i < len(keyvals); i++ {
+		//logger.Infof("Reading %v keys", len(keyvals))
+		n := len(keyvals)
+		for i := 0; i < n; i++ {
 			key := keyvals[i]
 			ttlCmd := spipeline.PTTL(key)
 			dumpCmd := spipeline.Dump(key)
 			ktvs = append(ktvs, ktv{key: key, ttlCmd: ttlCmd, valueCmd: dumpCmd})
 		}
 		spipeline.Exec()
-		logger.Info("Ran exec on source pipeline...")
 
 		dpipeline := dclient.Pipeline()
 		for _, ktv := range ktvs {
@@ -206,7 +206,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		if err != nil {
 			panic(err)
 		}
-		logger.Info("Ran exec on dest pipeline...")
+		bar.Add(n)
 	}
 
 	bar.Finish()
