@@ -173,14 +173,14 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 	}
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
-		pipeline := sclient.Pipeline()
+		spipeline := sclient.Pipeline()
 		for i := 0; i < len(keyvals); i++ {
 			key := keyvals[i]
-			ttlCmd := pipeline.PTTL(key)
-			dumpCmd := pipeline.Dump(key)
+			ttlCmd := spipeline.PTTL(key)
+			dumpCmd := spipeline.Dump(key)
 			ktvs = append(ktvs, ktv{key: key, ttlCmd: ttlCmd, valueCmd: dumpCmd})
 		}
-		pipeline.Exec()
+		spipeline.Exec()
 
 		dpipeline := dclient.Pipeline()
 		for _, ktv := range ktvs {
@@ -188,9 +188,10 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			if err != nil {
 				panic(err)
 			}
-			if ttl == 0 {
-				logger.Errorf("TTL is <= 0 for key %v", ktv.key)
-				panic("TTL is " + ttl.String())
+			if ttl < 0 {
+				logger.Errorf("TTL is < 0 for key %v", ktv.key)
+				//panic("TTL is " + ttl.String())
+				ttl = 0
 			}
 			value, err := ktv.valueCmd.Result()
 			if err != nil {
