@@ -97,8 +97,8 @@ func newClient(addr, password string, db int, sslCert string) *redis.Client {
 		Addr:         addr,
 		Password:     password,
 		DB:           db,
-		ReadTimeout:  80 * time.Second,
-		WriteTimeout: 80 * time.Second,
+		ReadTimeout:  20 * time.Minute,
+		WriteTimeout: 20 * time.Minute,
 		DialTimeout:  12 * time.Second,
 	}
 	if sslCert != "" {
@@ -188,7 +188,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		for _, ktv := range ktvs {
 			ttl, err := ktv.ttlCmd.Result()
 			if err != nil {
-				panic(err)
+				panic(fmt.Sprintf("Error reading key %v: %v", ktv.key, err))
 			}
 			if ttl < 0 {
 				//logger.Errorf("TTL is < 0 for key %v", ktv.key)
