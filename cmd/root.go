@@ -88,7 +88,7 @@ func initRedis() {
 
 	// Note this is only exposed for tests to avoid letting the caller do something stupid...
 	if flushsrc {
-		sclient.FlushDB()
+		//sclient.FlushDB()
 	}
 }
 
@@ -149,11 +149,12 @@ func (m *migrator) read(sc scan, ch chan []string) {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = sc(cursor, "", 4000).Result()
+		keyvals, cursor, err = sc(cursor, "", 1000).Result()
 		if err != nil {
 			panic(err)
 		}
 		cur := len(keyvals)
+		logger.Infof("Successfully scanned %v keys", cur)
 		n += int64(cur)
 
 		ch <- keyvals
