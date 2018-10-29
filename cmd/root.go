@@ -149,7 +149,7 @@ func (m *migrator) read(sc scan, ch chan []string) {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = sc(cursor, "", 1000).Result()
+		keyvals, cursor, err = sc(cursor, "", 10000).Result()
 		if err != nil {
 			panic(err)
 		}
