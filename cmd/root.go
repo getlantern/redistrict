@@ -154,7 +154,6 @@ func (m *migrator) read(sc scan, ch chan []string) {
 			panic(err)
 		}
 		cur := len(keyvals)
-		logger.Infof("Successfully scanned %v keys", cur)
 		n += int64(cur)
 
 		ch <- keyvals
@@ -175,6 +174,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
 		spipeline := sclient.Pipeline()
+		logger.Infof("Reading %v keys", len(keyvals))
 		for i := 0; i < len(keyvals); i++ {
 			key := keyvals[i]
 			ttlCmd := spipeline.PTTL(key)
@@ -182,6 +182,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			ktvs = append(ktvs, ktv{key: key, ttlCmd: ttlCmd, valueCmd: dumpCmd})
 		}
 		spipeline.Exec()
+		logger.Info("Ran exec on source pipeline...")
 
 		dpipeline := dclient.Pipeline()
 		for _, ktv := range ktvs {
@@ -205,6 +206,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		if err != nil {
 			panic(err)
 		}
+		logger.Info("Ran exec on dest pipeline...")
 	}
 
 	bar.Finish()
