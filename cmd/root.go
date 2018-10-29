@@ -167,9 +167,9 @@ func (m *migrator) read(sc scan, ch chan []string) {
 
 func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 	type ktv struct {
-		key   string
-		ttl   *redis.DurationCmd
-		value *redis.StringCmd
+		key      string
+		ttlCmd   *redis.DurationCmd
+		valueCmd *redis.StringCmd
 	}
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
@@ -178,20 +178,21 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			key := keyvals[i]
 			ttlCmd := pipeline.PTTL(key)
 			dumpCmd := pipeline.Dump(key)
-			ktvs = append(ktvs, ktv{key: key, ttl: ttlCmd, value: dumpCmd})
+			ktvs = append(ktvs, ktv{key: key, ttlCmd: ttlCmd, valueCmd: dumpCmd})
 		}
 		pipeline.Exec()
 
 		dpipeline := dclient.Pipeline()
 		for _, ktv := range ktvs {
-			ttl, err := ktv.ttl.Result()
+			ttl, err := ktv.ttlCmd.Result()
 			if err != nil {
 				panic(err)
 			}
 			if ttl == 0 {
 				logger.Errorf("TTL is <= 0 for key %v", ktv.key)
+				panic("TTL is " + ttl.String())
 			}
-			value, err := ktv.value.Result()
+			value, err := ktv.valueCmd.Result()
 			if err != nil {
 				panic(err)
 			}
