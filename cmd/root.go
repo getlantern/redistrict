@@ -42,6 +42,8 @@ var flushsrc bool
 var sclient *redis.Client
 var dclient *redis.Client
 
+var largeHashes = make(map[string]bool)
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "redistrict",
@@ -64,7 +66,7 @@ func Execute() {
 func init() {
 	dev, _ := zap.NewDevelopment()
 	logger = dev.Sugar()
-	cobra.OnInitialize(initRedis)
+	cobra.OnInitialize(initAll)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.redistrict.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&src, "src", "s", "127.0.0.1:6379", "Source redis host IP/name")
@@ -78,6 +80,12 @@ func init() {
 	rootCmd.PersistentFlags().IntVarP(&dstdb, "dstdb", "", 0, "Redis db number, defaults to 0")
 
 	rootCmd.PersistentFlags().BoolVarP(&flushdst, "flushdst", "", false, "Flush the destination db before doing anything")
+}
+
+// initAll initializes any necessary services, such as config and redis.
+func initAll() {
+	initConfig()
+	initRedis()
 }
 
 // initRedis creates initial redis connections.
@@ -175,13 +183,6 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		valueCmd *redis.StringCmd
 	}
 
-	hmigrated := map[string]bool{
-		"user->locale":     true,
-		"log-errors":       true,
-		"user->created-at": true,
-		"user->token":      true,
-	}
-
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
 		spipeline := sclient.Pipeline()
@@ -189,7 +190,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		n := len(keyvals)
 		for i := 0; i < n; i++ {
 			key := keyvals[i]
-			if _, ok := hmigrated[key]; ok {
+			if _, ok := largeHashes[key]; ok {
 				logger.Infof("Separately migrating large hash at %v", key)
 				hmigrateKey(key)
 				continue
@@ -250,6 +251,9 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		hashes := viper.GetStringSlice("large-hashes")
+		for _, hash := range hashes {
+			largeHashes[hash] = true
+		}
 	}
 }

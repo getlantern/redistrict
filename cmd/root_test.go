@@ -8,8 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestMigrate tests migration from one database to another.
-func TestMigrate(t *testing.T) {
+func TestConfig(t *testing.T) {
+	cfgFile = ""
+	initConfig()
+}
+
+func TestRootMigrate(t *testing.T) {
 	flushdst = true
 	flushsrc = true
 
