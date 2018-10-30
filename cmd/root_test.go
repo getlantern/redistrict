@@ -2,15 +2,31 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra/doc"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestConfig(t *testing.T) {
 	cfgFile = ""
 	initConfig()
+
+	empty := viper.GetStringSlice("does-not-exist")
+	assert.Equal(t, 0, len(empty))
+
+	err := doc.GenMarkdownTree(rootCmd, "")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = doc.GenMarkdownTree(hmigrateCmd, "")
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func TestRootMigrate(t *testing.T) {

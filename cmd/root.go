@@ -44,13 +44,26 @@ var dclient *redis.Client
 
 var largeHashes = make(map[string]bool)
 
-// rootCmd represents the base command when called without any subcommands
+var tempHashes = make([]string, 0)
+
+// rootCmd migrates from one database to another using DUMP and RESTORE and including support for
+// large hashes.
 var rootCmd = &cobra.Command{
 	Use:   "redistrict",
-	Short: "Utility for migrating redis data from one database to another",
+	Short: "CLI utility for migrating redis data from one database to another",
 	Long: `A program for migrating redis databases particularly when you don't have SSH
-access to the destination machine. This also solves edge cases such as hashes
-that are too big for DUMP, RESTORE, and MIGRATE (bigger than 512MB).`,
+access to the destination machine. This uses DUMP and RESTORE for all keys except when the caller
+specifies key names of large hashes to migrate separately, as DUMP and RESTORE don't support hashes larger
+than 512MBs. More details are at https://github.com/antirez/redis/issues/757
+
+You can specify large hashes using the --hashKeys flag or by specifying large-hashes in $HOME/.redistrict.yaml, as in:
+
+large-hashes:
+  - key->value
+  - largeHash
+  - evenLarger
+
+The command line flags override the config file.`,
 	Run: migrate,
 }
 
@@ -68,6 +81,8 @@ func init() {
 	logger = dev.Sugar()
 	cobra.OnInitialize(initAll)
 
+	rootCmd.PersistentFlags().StringSliceVar(&tempHashes, "hashKeys", make([]string, 0),
+		"Key names of large hashes to automatically call hmigrate on, in the form --hashKeys=\"k1,k2\"")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.redistrict.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&src, "src", "s", "127.0.0.1:6379", "Source redis host IP/name")
 	rootCmd.PersistentFlags().StringVarP(&dst, "dst", "d", "127.0.0.1:6379", "Destination redis host IP/name")
@@ -137,6 +152,14 @@ type scan func(cursor uint64, match string, count int64) *redis.ScanCmd
 type klen func() *redis.IntCmd
 
 func migrate(cmd *cobra.Command, args []string) {
+	if len(tempHashes) > 0 {
+		// Just make sure the command line fully overrides the config file.
+		largeHashes = make(map[string]bool)
+		for _, hash := range tempHashes {
+			largeHashes[hash] = true
+		}
+	}
+
 	m := &migrator{}
 	m.migrateWith(sclient.Scan, sclient.DBSize)
 }

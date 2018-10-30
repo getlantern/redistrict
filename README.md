@@ -12,9 +12,9 @@ go get -u github.com/getlantern/redistrict
 A program for migrating redis databases particularly when you don't have SSH
 access to the destination machine. This uses DUMP and RESTORE for all keys except when the caller
 specifies key names of large hashes to migrate separately, as DUMP and RESTORE don't support hashes larger
-than 512MBs is not supported. More details are at https://github.com/antirez/redis/issues/757
+than 512MBs. More details are at https://github.com/antirez/redis/issues/757
 
-You can specify large hashes using the --hashes flag or by specifying large-hashes in $HOME/.redistrict.yaml, as in:
+You can specify large hashes using the --hashKeys flag or by specifying large-hashes in $HOME/.redistrict.yaml, as in:
 
 large-hashes:
   - key->value

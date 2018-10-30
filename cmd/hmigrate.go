@@ -21,7 +21,8 @@ var hmigrateCmd = &cobra.Command{
 	Use:   "hmigrate",
 	Short: "Migrate a large hash at the specified key",
 	Long: `Redis DUMP, RESTORE, and MIGRATE commands do not support hashes larger than 512MB. This
-uses HSCAN to migrate large hashes.`,
+uses HSCAN to migrate large hashes. This is essentially akin to a theoretical HMIGRATE redis
+command.`,
 	Run: hm.hmigrate,
 }
 
