@@ -1,12 +1,22 @@
 ## redistrict
 
-Utility for migrating redis data from one database to another
+CLI utility for migrating redis data from one database to another
 
 ### Synopsis
 
 A program for migrating redis databases particularly when you don't have SSH
-access to the destination machine. This also solves edge cases such as hashes
-that are too big for DUMP, RESTORE, and MIGRATE (bigger than 512MB).
+access to the destination machine. This uses DUMP and RESTORE for all keys except when the caller
+specifies key names of large hashes to migrate separately, as DUMP and RESTORE don't support hashes larger
+than 512MBs is not supported. More details are at https://github.com/antirez/redis/issues/757
+
+You can specify large hashes using the --hashes flag or by specifying large-hashes in $HOME/.redistrict.yaml, as in:
+
+large-hashes:
+  - key->value
+  - largeHash
+  - evenLarger
+
+The command line flags override the config file.
 
 ```
 redistrict [flags]
@@ -20,6 +30,7 @@ redistrict [flags]
       --dstauth string      Destination redis password
       --dstdb int           Redis db number, defaults to 0
       --flushdst            Flush the destination db before doing anything
+      --hashKeys strings    Key names of large hashes to automatically call hmigrate on, in the form --hashKeys="k1,k2"
   -h, --help                help for redistrict
   -s, --src string          Source redis host IP/name (default "127.0.0.1:6379")
       --srcauth string      Source redis password
