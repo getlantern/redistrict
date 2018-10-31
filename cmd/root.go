@@ -186,7 +186,9 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 		fmt.Println("Source and destination databases cannot be the same. Consider using a different database ID.")
 		return
 	}
+	logger.Infof("Fetching length from client %v", sclient)
 	length, err := kl().Result()
+	logger.Infof("Fetched length from client %v", sclient)
 	if err != nil {
 		panic(fmt.Sprintf("Error getting source database size: %v", err))
 	}
