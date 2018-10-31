@@ -203,7 +203,7 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 	multi := mpb.New(mpb.WithWidth(80), mpb.WithWaitGroup(&wg))
 	wg.Add(1)
 
-	bar := m.newBar(multi, length, "keys")
+	bar := m.newBar(multi, length, "KEYS *")
 
 	// Just include the length of the large hashes in the total length.
 	for k := range m.largeHashes {
@@ -216,7 +216,6 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 
 		go hmigrateKey(k, hbar, &wg)
 	}
-	//bar := pb.StartNew(int(length))
 
 	ch := make(chan []string)
 
@@ -226,14 +225,6 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 
 func (m *migrator) newBar(multi *mpb.Progress, length int64, name string) *mpb.Bar {
 	return multi.AddBar(length,
-		/*
-			mpb.PrependDecorators(
-				decor.Name(name, decor.WC{W: len(name) + 1, C: decor.DidentRight}),
-				//decor.Name(name),
-				// decor.DSyncWidth bit enables column width synchronization
-				//decor.Percentage(decor.WCSyncSpace),
-			),
-		*/
 		mpb.AppendDecorators(
 			// replace ETA decorator with "done" message, OnComplete event
 			decor.OnComplete(
@@ -241,7 +232,7 @@ func (m *migrator) newBar(multi *mpb.Progress, length int64, name string) *mpb.B
 				decor.EwmaETA(decor.ET_STYLE_GO, 60), "done",
 			),
 			decor.Percentage(decor.WCSyncSpace),
-			decor.Name(name),
+			decor.Name(fmt.Sprintf("  - %s", name)),
 		),
 	)
 }
