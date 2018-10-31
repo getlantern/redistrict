@@ -227,9 +227,10 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 func (m *migrator) newBar(multi *mpb.Progress, length int64, name string) *mpb.Bar {
 	return multi.AddBar(length,
 		mpb.PrependDecorators(
-			decor.Name(name),
+			decor.Name(name, decor.WC{W: len(name) + 1, C: decor.DidentRight}),
+			//decor.Name(name),
 			// decor.DSyncWidth bit enables column width synchronization
-			decor.Percentage(decor.WCSyncSpace),
+			//decor.Percentage(decor.WCSyncSpace),
 		),
 		mpb.AppendDecorators(
 			// replace ETA decorator with "done" message, OnComplete event
@@ -237,6 +238,7 @@ func (m *migrator) newBar(multi *mpb.Progress, length int64, name string) *mpb.B
 				// ETA decorator with ewma age of 60
 				decor.EwmaETA(decor.ET_STYLE_GO, 60), "done",
 			),
+			decor.Percentage(decor.WCSyncSpace),
 		),
 	)
 }
