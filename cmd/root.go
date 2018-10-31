@@ -14,8 +14,9 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/vbauerster/mpb"
+	"github.com/vbauerster/mpb/decor"
 	"go.uber.org/zap"
-	pb "gopkg.in/cheggaaa/pb.v2"
 )
 
 var logger *zap.SugaredLogger
@@ -192,12 +193,44 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 	if err != nil {
 		panic(fmt.Sprintf("Error getting source database size: %v", err))
 	}
-	bar := pb.StartNew(int(length))
+
+	var wg sync.WaitGroup
+	multi := mpb.New(mpb.WithWaitGroup(&wg))
+	wg.Add(1 + len(m.largeHashes))
+
+	bar := multi.AddBar(length)
+
+	// Just include the length of the large hashes in the total length.
+	for k := range m.largeHashes {
+		hl, err := sclient.HLen(k).Result()
+		if err != nil {
+			panic(fmt.Sprintf("Could not get hash length %v", err))
+		}
+
+		hbar := multi.AddBar(int64(hl),
+			mpb.PrependDecorators(
+				// simple name decorator
+				decor.Name(k),
+				// decor.DSyncWidth bit enables column width synchronization
+				decor.Percentage(decor.WCSyncSpace),
+			),
+			mpb.AppendDecorators(
+				// replace ETA decorator with "done" message, OnComplete event
+				decor.OnComplete(
+					// ETA decorator with ewma age of 60
+					decor.EwmaETA(decor.ET_STYLE_GO, 60), "done",
+				),
+			),
+		)
+
+		go hmigrateKey(k, hbar, &wg)
+	}
+	//bar := pb.StartNew(int(length))
 
 	ch := make(chan []string)
 
 	go m.read(sc, ch)
-	m.write(ch, bar)
+	m.write(ch, bar, &wg)
 }
 
 func (m *migrator) read(sc scan, ch chan []string) {
@@ -222,7 +255,7 @@ func (m *migrator) read(sc scan, ch chan []string) {
 	}
 }
 
-func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
+func (m *migrator) write(ch chan []string, bar *mpb.Bar, wg *sync.WaitGroup) {
 	type ktv struct {
 		key      string
 		ttlCmd   *redis.DurationCmd
@@ -230,7 +263,6 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 	}
 
 	largeKeyCount := 0
-	var wg sync.WaitGroup
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
 		spipeline := sclient.Pipeline()
@@ -240,9 +272,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			key := keyvals[i]
 			if _, ok := m.largeHashes[key]; ok {
 				logger.Infof("Separately migrating large hash at %v", key)
-				wg.Add(1)
 				largeKeyCount++
-				go hmigrateKey(key, bar, &wg)
 				continue
 			}
 			ttlCmd := spipeline.PTTL(key)
@@ -274,12 +304,12 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		if _, err := dpipeline.Exec(); err != nil {
 			panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
 		}
-		bar.Add(n)
+		bar.IncrBy(n)
+		//bar.Add(n)
 	}
-
+	wg.Done()
 	logger.Infof("Waiting on %v large hashes to complete transferring", largeKeyCount)
 	wg.Wait()
-	bar.Finish()
 }
 
 // initConfig reads in config file and ENV variables if set.
