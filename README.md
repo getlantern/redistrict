@@ -16,10 +16,12 @@ than 512MBs. More details are at https://github.com/antirez/redis/issues/757
 
 You can specify large hashes using the --hashKeys flag or by specifying large-hashes in $HOME/.redistrict.yaml, as in:
 
+```
 large-hashes:
   - key->value
   - largeHash
   - evenLarger
+```
 
 The command line flags override the config file.
 
