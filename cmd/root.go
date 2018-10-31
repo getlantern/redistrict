@@ -123,14 +123,19 @@ func (m *migrator) writingToSelf() bool {
 
 // initRedis creates initial redis connections.
 func (m *migrator) initRedis() {
+	logger.Info("Initing redis")
+	dstart := time.Now()
 	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
 
 	if m.flushdst {
 		dclient.FlushDB()
 	}
+	logger.Infof("Initing redis flushed destination DB after %v", time.Since(dstart))
 
+	sstart := time.Now()
 	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.sslsrcCert)
 
+	logger.Infof("Initing redis created source connection after %v", time.Since(sstart))
 	// Note this is only exposed for tests to avoid letting the caller do something stupid...
 	if m.flushsrc {
 		//sclient.FlushDB()
