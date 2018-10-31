@@ -204,7 +204,7 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 	for k := range m.largeHashes {
 		hl, err := sclient.HLen(k).Result()
 		if err != nil {
-			panic(fmt.Sprintf("Could not get hash length %v", err))
+			panic(fmt.Sprintf("Could not get hash length for %v:\n %v", k, err))
 		}
 
 		hbar := multi.AddBar(int64(hl),
