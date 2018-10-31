@@ -39,13 +39,13 @@ type hset func(key string, hmap map[string]interface{}) *redis.StatusCmd
 
 type hlen func(key string) *redis.IntCmd
 
-func hmigrateKey(k string, showProgress bool, wg *sync.WaitGroup) {
+func hmigrateKey(k string, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	hm.key = k
-	hm.migrate(showProgress, wg)
+	hm.migrate(bar, wg)
 }
 
-func (hm *hmigrator) migrate(showProgress bool, wg *sync.WaitGroup) {
-	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen, showProgress, wg)
+func (hm *hmigrator) migrate(bar *pb.ProgressBar, wg *sync.WaitGroup) {
+	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen, bar, wg)
 }
 
 func (hm *hmigrator) hmigrate(cmd *cobra.Command, args []string) {
@@ -53,7 +53,7 @@ func (hm *hmigrator) hmigrate(cmd *cobra.Command, args []string) {
 	// a part of a larger migration.
 	var wg sync.WaitGroup
 	wg.Add(1)
-	hm.migrate(true, &wg)
+	hm.migrate(nil, &wg)
 }
 
 type progress interface {
@@ -66,14 +66,22 @@ type prog struct{}
 func (p *prog) Finish() *pb.ProgressBar { return nil }
 func (p *prog) Add(int) *pb.ProgressBar { return nil }
 
-func (hm *hmigrator) hmigrateWith(scan hscan, set hset, hl hlen, showProgress bool, wg *sync.WaitGroup) {
+func (hm *hmigrator) hmigrateWith(scan hscan, set hset, hl hlen, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	length := hl(hm.key).Val()
-	var bar progress
-	if showProgress {
+	if bar == nil {
 		bar = pb.StartNew(int(length))
 	} else {
-		bar = &prog{}
+		bar.SetTotal(bar.Total() + length)
 	}
+
+	/*
+		var bar progress
+		if showProgress {
+			bar = pb.StartNew(int(length))
+		} else {
+			bar = &prog{}
+		}
+	*/
 
 	ch := make(chan map[string]interface{})
 
@@ -104,7 +112,7 @@ func (hm *hmigrator) read(scan hscan, ch chan map[string]interface{}) {
 	}
 }
 
-func (hm *hmigrator) write(key string, set hset, ch chan map[string]interface{}, bar progress, wg *sync.WaitGroup) {
+func (hm *hmigrator) write(key string, set hset, ch chan map[string]interface{}, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for hmap := range ch {
 		status, err := set(key, hmap).Result()

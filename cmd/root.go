@@ -116,14 +116,19 @@ func (m *migrator) initAll() {
 	m.initRedis()
 }
 
+func (m *migrator) writingToSelf() bool {
+	return m.src == m.dst && m.srcdb == m.dstdb
+}
+
 // initRedis creates initial redis connections.
 func (m *migrator) initRedis() {
-	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.sslsrcCert)
 	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
 
 	if m.flushdst {
 		dclient.FlushDB()
 	}
+
+	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.sslsrcCert)
 
 	// Note this is only exposed for tests to avoid letting the caller do something stupid...
 	if m.flushsrc {
@@ -136,8 +141,8 @@ func (m *migrator) newClient(addr, password string, db int, sslCert string) *red
 		Addr:         addr,
 		Password:     password,
 		DB:           db,
-		ReadTimeout:  20 * time.Minute,
-		WriteTimeout: 20 * time.Minute,
+		ReadTimeout:  10 * time.Minute,
+		WriteTimeout: 10 * time.Minute,
 		DialTimeout:  12 * time.Second,
 	}
 	if sslCert != "" {
@@ -177,11 +182,14 @@ func (m *migrator) migrate(cmd *cobra.Command, args []string) {
 }
 
 func (m *migrator) migrateWith(sc scan, kl klen) {
+	if m.writingToSelf() {
+		fmt.Println("Source and destination databases cannot be the same. Consider using a different database ID.")
+		return
+	}
 	length, err := kl().Result()
 	if err != nil {
 		panic(fmt.Sprintf("Error getting source database size: %v", err))
 	}
-	logger.Debugf("Migrating database with %v keys", length)
 	bar := pb.StartNew(int(length))
 
 	ch := make(chan []string)
@@ -196,7 +204,7 @@ func (m *migrator) read(sc scan, ch chan []string) {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = sc(cursor, "", 10000).Result()
+		keyvals, cursor, err = sc(cursor, "", int64(m.count)).Result()
 		if err != nil {
 			panic(fmt.Sprintf("Error scanning source: %v", err))
 		}
@@ -232,7 +240,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 				logger.Infof("Separately migrating large hash at %v", key)
 				wg.Add(1)
 				largeKeyCount++
-				go hmigrateKey(key, false, &wg)
+				go hmigrateKey(key, bar, &wg)
 				continue
 			}
 			ttlCmd := spipeline.PTTL(key)
@@ -270,7 +278,6 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 	logger.Infof("Waiting on %v large hashes to complete transferring", largeKeyCount)
 	wg.Wait()
 	bar.Finish()
-
 }
 
 // initConfig reads in config file and ENV variables if set.
