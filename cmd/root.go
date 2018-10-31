@@ -169,6 +169,7 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 	if err != nil {
 		panic(err)
 	}
+	logger.Debugf("Migrating database with %v keys", length)
 	bar := pb.StartNew(int(length))
 
 	ch := make(chan []string)
@@ -222,7 +223,9 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			dumpCmd := spipeline.Dump(key)
 			ktvs = append(ktvs, ktv{key: key, ttlCmd: ttlCmd, valueCmd: dumpCmd})
 		}
-		spipeline.Exec()
+		if _, err := spipeline.Exec(); err != nil {
+			panic(fmt.Sprintf("Error execing source pipeline: %v", err))
+		}
 
 		dpipeline := dclient.Pipeline()
 		for _, ktv := range ktvs {
@@ -242,9 +245,8 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			dpipeline.Restore(ktv.key, ttl, value)
 		}
 
-		_, err := dpipeline.Exec()
-		if err != nil {
-			panic(fmt.Sprintf("Error execing pipeline: %v", err))
+		if _, err := dpipeline.Exec(); err != nil {
+			panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
 		}
 		bar.Add(n)
 	}
