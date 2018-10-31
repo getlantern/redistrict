@@ -46,6 +46,7 @@ func hmigrateKey(k string, bar *mpb.Bar, wg *sync.WaitGroup) {
 }
 
 func (hm *hmigrator) migrate(bar *mpb.Bar, wg *sync.WaitGroup) {
+	wg.Add(1)
 	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen, bar, wg)
 }
 

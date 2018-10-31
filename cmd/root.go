@@ -195,8 +195,8 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 	}
 
 	var wg sync.WaitGroup
-	multi := mpb.New(mpb.WithWaitGroup(&wg))
-	wg.Add(1 + len(m.largeHashes))
+	multi := mpb.New(mpb.WithWidth(80), mpb.WithWaitGroup(&wg))
+	wg.Add(1)
 
 	bar := m.newBar(multi, length, "keys")
 
@@ -222,7 +222,6 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 func (m *migrator) newBar(multi *mpb.Progress, length int64, name string) *mpb.Bar {
 	return multi.AddBar(length,
 		mpb.PrependDecorators(
-			// simple name decorator
 			decor.Name(name),
 			// decor.DSyncWidth bit enables column width synchronization
 			decor.Percentage(decor.WCSyncSpace),
