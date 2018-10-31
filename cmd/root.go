@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -218,6 +219,8 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		valueCmd *redis.StringCmd
 	}
 
+	largeKeyCount := 0
+	var wg sync.WaitGroup
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
 		spipeline := sclient.Pipeline()
@@ -227,7 +230,9 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 			key := keyvals[i]
 			if _, ok := m.largeHashes[key]; ok {
 				logger.Infof("Separately migrating large hash at %v", key)
-				hmigrateKey(key)
+				wg.Add(1)
+				largeKeyCount++
+				go hmigrateKey(key, false, &wg)
 				continue
 			}
 			ttlCmd := spipeline.PTTL(key)
@@ -262,7 +267,10 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		bar.Add(n)
 	}
 
+	logger.Infof("Waiting on %v large hashes to complete transferring", largeKeyCount)
+	wg.Wait()
 	bar.Finish()
+
 }
 
 // initConfig reads in config file and ENV variables if set.

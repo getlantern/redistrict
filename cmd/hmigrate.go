@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
-
 	pb "gopkg.in/cheggaaa/pb.v2"
 )
 
@@ -39,27 +39,46 @@ type hset func(key string, hmap map[string]interface{}) *redis.StatusCmd
 
 type hlen func(key string) *redis.IntCmd
 
-func hmigrateKey(k string) {
+func hmigrateKey(k string, showProgress bool, wg *sync.WaitGroup) {
 	hm.key = k
-	hm.migrate()
+	hm.migrate(showProgress, wg)
 }
 
-func (hm *hmigrator) migrate() {
-	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen)
+func (hm *hmigrator) migrate(showProgress bool, wg *sync.WaitGroup) {
+	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen, showProgress, wg)
 }
 
 func (hm *hmigrator) hmigrate(cmd *cobra.Command, args []string) {
-	hm.migrate()
+	// This is a dummy waitgroup. The waitgroup is really only used when migrating large hashes as
+	// a part of a larger migration.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	hm.migrate(true, &wg)
 }
 
-func (hm *hmigrator) hmigrateWith(scan hscan, set hset, hl hlen) {
+type progress interface {
+	Finish() *pb.ProgressBar
+	Add(int) *pb.ProgressBar
+}
+
+type prog struct{}
+
+func (p *prog) Finish() *pb.ProgressBar { return nil }
+func (p *prog) Add(int) *pb.ProgressBar { return nil }
+
+func (hm *hmigrator) hmigrateWith(scan hscan, set hset, hl hlen, showProgress bool, wg *sync.WaitGroup) {
 	length := hl(hm.key).Val()
-	bar := pb.StartNew(int(length))
+	var bar progress
+	if showProgress {
+		bar = pb.StartNew(int(length))
+	} else {
+		bar = &prog{}
+	}
 
 	ch := make(chan map[string]interface{})
 
 	go hm.read(scan, ch)
-	hm.write(hm.key, set, ch, bar)
+	hm.write(hm.key, set, ch, bar, wg)
 }
 
 func (hm *hmigrator) read(scan hscan, ch chan map[string]interface{}) {
@@ -85,7 +104,8 @@ func (hm *hmigrator) read(scan hscan, ch chan map[string]interface{}) {
 	}
 }
 
-func (hm *hmigrator) write(key string, set hset, ch chan map[string]interface{}, bar *pb.ProgressBar) {
+func (hm *hmigrator) write(key string, set hset, ch chan map[string]interface{}, bar progress, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for hmap := range ch {
 		status, err := set(key, hmap).Result()
 		if err != nil {
