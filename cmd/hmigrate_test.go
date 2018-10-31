@@ -12,12 +12,19 @@ import (
 // creates a redis instance inside docker, or you need to have a locally running redis on the
 // default port.
 func TestHMigrate(t *testing.T) {
-	flushdst = true
-	flushsrc = true
+	var m = &migrator{
+		src:         "127.0.0.1:6379",
+		dst:         "127.0.0.1:6379",
+		largeHashes: make(map[string]bool),
+		tempHashes:  make([]string, 0),
+	}
+
+	m.flushdst = true
+	m.flushsrc = true
 
 	// Just use a separate database on the single redis instance.
-	dstdb = 1
-	initRedis()
+	m.dstdb = 1
+	m.initRedis()
 
 	testkey := "hkey1"
 	for i := 0; i < 10000; i++ {

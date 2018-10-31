@@ -20,31 +20,42 @@ import (
 var logger *zap.SugaredLogger
 
 type migrator struct {
+	cfgFile string
+
+	src string
+	dst string
+
+	srcauth string
+	dstauth string
+
+	sslsrcCert string
+	ssldstCert string
+
+	srcdb int
+	dstdb int
+
+	flushdst bool
+	flushsrc bool
+
+	largeHashes map[string]bool
+
+	tempHashes []string
+
+	count int
 }
 
-var cfgFile string
+var mig = &migrator{
+	src:         "127.0.0.1:6379",
+	dst:         "127.0.0.1:6379",
+	largeHashes: make(map[string]bool),
+	tempHashes:  make([]string, 0),
+}
 
-var src = "127.0.0.1:6379"
-var dst = "127.0.0.1:6379"
-
-var srcauth string
-var dstauth string
-
-var sslsrcCert string
-var ssldstCert string
-
-var srcdb int
-var dstdb int
-
-var flushdst bool
-var flushsrc bool
-
+// Source redis client.
 var sclient *redis.Client
+
+// Destination redis client.
 var dclient *redis.Client
-
-var largeHashes = make(map[string]bool)
-
-var tempHashes = make([]string, 0)
 
 // rootCmd migrates from one database to another using DUMP and RESTORE and including support for
 // large hashes.
@@ -64,7 +75,7 @@ large-hashes:
   - evenLarger
 
 The command line flags override the config file.`,
-	Run: migrate,
+	Run: mig.migrate,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -79,46 +90,47 @@ func Execute() {
 func init() {
 	dev, _ := zap.NewDevelopment()
 	logger = dev.Sugar()
-	cobra.OnInitialize(initAll)
+	cobra.OnInitialize(mig.initAll)
 
-	rootCmd.PersistentFlags().StringSliceVar(&tempHashes, "hashKeys", make([]string, 0),
+	rootCmd.PersistentFlags().StringSliceVar(&mig.tempHashes, "hashKeys", make([]string, 0),
 		"Key names of large hashes to automatically call hmigrate on, in the form --hashKeys=\"k1,k2\"")
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.redistrict.yaml)")
-	rootCmd.PersistentFlags().StringVarP(&src, "src", "s", "127.0.0.1:6379", "Source redis host IP/name")
-	rootCmd.PersistentFlags().StringVarP(&dst, "dst", "d", "127.0.0.1:6379", "Destination redis host IP/name")
+	rootCmd.PersistentFlags().StringVar(&mig.cfgFile, "config", "", "config file (default is $HOME/.redistrict.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&mig.src, "src", "s", "127.0.0.1:6379", "Source redis host IP/name")
+	rootCmd.PersistentFlags().StringVarP(&mig.dst, "dst", "d", "127.0.0.1:6379", "Destination redis host IP/name")
 
-	rootCmd.PersistentFlags().StringVarP(&srcauth, "srcauth", "", "", "Source redis password")
-	rootCmd.PersistentFlags().StringVarP(&dstauth, "dstauth", "", "", "Destination redis password")
-	rootCmd.PersistentFlags().StringVarP(&sslsrcCert, "sslsrcCert", "", "", "SSL certificate path for source redis, if any.")
-	rootCmd.PersistentFlags().StringVarP(&ssldstCert, "ssldstCert", "", "", "SSL certificate path for destination redis, if any.")
-	rootCmd.PersistentFlags().IntVarP(&srcdb, "srcdb", "", 0, "Redis db number, defaults to 0")
-	rootCmd.PersistentFlags().IntVarP(&dstdb, "dstdb", "", 0, "Redis db number, defaults to 0")
+	rootCmd.PersistentFlags().StringVarP(&mig.srcauth, "srcauth", "", "", "Source redis password")
+	rootCmd.PersistentFlags().StringVarP(&mig.dstauth, "dstauth", "", "", "Destination redis password")
+	rootCmd.PersistentFlags().StringVarP(&mig.sslsrcCert, "sslsrcCert", "", "", "SSL certificate path for source redis, if any.")
+	rootCmd.PersistentFlags().StringVarP(&mig.ssldstCert, "ssldstCert", "", "", "SSL certificate path for destination redis, if any.")
+	rootCmd.PersistentFlags().IntVarP(&mig.srcdb, "srcdb", "", 0, "Redis db number, defaults to 0")
+	rootCmd.PersistentFlags().IntVarP(&mig.dstdb, "dstdb", "", 0, "Redis db number, defaults to 0")
 
-	rootCmd.PersistentFlags().BoolVarP(&flushdst, "flushdst", "", false, "Flush the destination db before doing anything")
+	rootCmd.PersistentFlags().BoolVarP(&mig.flushdst, "flushdst", "", false, "Flush the destination db before doing anything")
+	rootCmd.Flags().IntVarP(&mig.count, "count", "", 5000, "The number of keys to scan on each pass")
 }
 
 // initAll initializes any necessary services, such as config and redis.
-func initAll() {
-	initConfig()
-	initRedis()
+func (m *migrator) initAll() {
+	m.initConfig()
+	m.initRedis()
 }
 
 // initRedis creates initial redis connections.
-func initRedis() {
-	sclient = newClient(src, srcauth, srcdb, sslsrcCert)
-	dclient = newClient(dst, dstauth, dstdb, ssldstCert)
+func (m *migrator) initRedis() {
+	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.sslsrcCert)
+	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
 
-	if flushdst {
+	if m.flushdst {
 		dclient.FlushDB()
 	}
 
 	// Note this is only exposed for tests to avoid letting the caller do something stupid...
-	if flushsrc {
+	if m.flushsrc {
 		//sclient.FlushDB()
 	}
 }
 
-func newClient(addr, password string, db int, sslCert string) *redis.Client {
+func (m *migrator) newClient(addr, password string, db int, sslCert string) *redis.Client {
 	options := &redis.Options{
 		Addr:         addr,
 		Password:     password,
@@ -128,12 +140,12 @@ func newClient(addr, password string, db int, sslCert string) *redis.Client {
 		DialTimeout:  12 * time.Second,
 	}
 	if sslCert != "" {
-		options.TLSConfig = tlsConfig(sslCert)
+		options.TLSConfig = m.tlsConfig(sslCert)
 	}
 	return redis.NewClient(options)
 }
 
-func tlsConfig(certPath string) *tls.Config {
+func (m *migrator) tlsConfig(certPath string) *tls.Config {
 	cert, err := ioutil.ReadFile(certPath)
 	if err != nil {
 		log.Fatal(err)
@@ -151,23 +163,22 @@ type scan func(cursor uint64, match string, count int64) *redis.ScanCmd
 
 type klen func() *redis.IntCmd
 
-func migrate(cmd *cobra.Command, args []string) {
-	if len(tempHashes) > 0 {
+func (m *migrator) migrate(cmd *cobra.Command, args []string) {
+	if len(m.tempHashes) > 0 {
 		// Just make sure the command line fully overrides the config file.
-		largeHashes = make(map[string]bool)
-		for _, hash := range tempHashes {
-			largeHashes[hash] = true
+		m.largeHashes = make(map[string]bool)
+		for _, hash := range m.tempHashes {
+			m.largeHashes[hash] = true
 		}
 	}
 
-	m := &migrator{}
 	m.migrateWith(sclient.Scan, sclient.DBSize)
 }
 
 func (m *migrator) migrateWith(sc scan, kl klen) {
 	length, err := kl().Result()
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("Error getting source database size: %v", err))
 	}
 	logger.Debugf("Migrating database with %v keys", length)
 	bar := pb.StartNew(int(length))
@@ -186,7 +197,7 @@ func (m *migrator) read(sc scan, ch chan []string) {
 		var err error
 		keyvals, cursor, err = sc(cursor, "", 10000).Result()
 		if err != nil {
-			panic(err)
+			panic(fmt.Sprintf("Error scanning source: %v", err))
 		}
 		cur := len(keyvals)
 		n += int64(cur)
@@ -214,7 +225,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 		n := len(keyvals)
 		for i := 0; i < n; i++ {
 			key := keyvals[i]
-			if _, ok := largeHashes[key]; ok {
+			if _, ok := m.largeHashes[key]; ok {
 				logger.Infof("Separately migrating large hash at %v", key)
 				hmigrateKey(key)
 				continue
@@ -255,10 +266,10 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar) {
 }
 
 // initConfig reads in config file and ENV variables if set.
-func initConfig() {
-	if cfgFile != "" {
+func (m *migrator) initConfig() {
+	if m.cfgFile != "" {
 		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
+		viper.SetConfigFile(m.cfgFile)
 	} else {
 		// Find home directory.
 		home, err := homedir.Dir()
@@ -278,7 +289,7 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		hashes := viper.GetStringSlice("large-hashes")
 		for _, hash := range hashes {
-			largeHashes[hash] = true
+			m.largeHashes[hash] = true
 		}
 	}
 }

@@ -12,8 +12,14 @@ import (
 )
 
 func TestConfig(t *testing.T) {
-	cfgFile = ""
-	initConfig()
+	var m = &migrator{
+		src:         "127.0.0.1:6379",
+		dst:         "127.0.0.1:6379",
+		largeHashes: make(map[string]bool),
+		tempHashes:  make([]string, 0),
+	}
+	m.cfgFile = ""
+	m.initConfig()
 
 	empty := viper.GetStringSlice("does-not-exist")
 	assert.Equal(t, 0, len(empty))
@@ -30,12 +36,18 @@ func TestConfig(t *testing.T) {
 }
 
 func TestRootMigrate(t *testing.T) {
-	flushdst = true
-	flushsrc = true
+	var m = &migrator{
+		src:         "127.0.0.1:6379",
+		dst:         "127.0.0.1:6379",
+		largeHashes: make(map[string]bool),
+		tempHashes:  make([]string, 0),
+	}
+	m.flushdst = true
+	m.flushsrc = true
 
 	// Just use a separate database on the single redis instance.
-	dstdb = 1
-	initRedis()
+	m.dstdb = 1
+	m.initRedis()
 
 	for i := 0; i < 20; i++ {
 		err := sclient.Set(fmt.Sprintf("key-%d", i), fmt.Sprintf("value-%d", i), 1*time.Hour).Err()
@@ -51,7 +63,7 @@ func TestRootMigrate(t *testing.T) {
 		assert.Error(t, err)
 	}
 
-	migrate(nil, make([]string, 0))
+	m.migrate(nil, make([]string, 0))
 
 	for i := 0; i < 20; i++ {
 		cmd := dclient.Get(fmt.Sprintf("key-%d", i))

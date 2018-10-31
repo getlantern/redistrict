@@ -10,8 +10,8 @@ import (
 )
 
 type hmigrator struct {
-	key   string
-	count int
+	key    string
+	hcount int
 }
 
 var hm = &hmigrator{}
@@ -30,7 +30,7 @@ func init() {
 	rootCmd.AddCommand(hmigrateCmd)
 	hmigrateCmd.Flags().StringVarP(&hm.key, "key", "k", "", "The key of the hash to migrate")
 	hmigrateCmd.MarkFlagRequired("key")
-	hmigrateCmd.Flags().IntVarP(&hm.count, "count", "", 1000, "The number of hash entries to scan on each pass")
+	hmigrateCmd.Flags().IntVarP(&hm.hcount, "hcount", "", 5000, "The number of hash entries to scan on each pass")
 }
 
 type hscan func(key string, cursor uint64, match string, count int64) *redis.ScanCmd
@@ -68,7 +68,7 @@ func (hm *hmigrator) read(scan hscan, ch chan map[string]interface{}) {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = scan(hm.key, cursor, "", int64(hm.count)).Result()
+		keyvals, cursor, err = scan(hm.key, cursor, "", int64(hm.hcount)).Result()
 		if err != nil {
 			panic(err)
 		}
