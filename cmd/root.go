@@ -198,7 +198,7 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 	multi := mpb.New(mpb.WithWaitGroup(&wg))
 	wg.Add(1 + len(m.largeHashes))
 
-	bar := multi.AddBar(length)
+	bar := m.newBar(multi, length, "keys")
 
 	// Just include the length of the large hashes in the total length.
 	for k := range m.largeHashes {
@@ -207,21 +207,7 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 			panic(fmt.Sprintf("Could not get hash length for %v:\n %v", k, err))
 		}
 
-		hbar := multi.AddBar(int64(hl),
-			mpb.PrependDecorators(
-				// simple name decorator
-				decor.Name(k),
-				// decor.DSyncWidth bit enables column width synchronization
-				decor.Percentage(decor.WCSyncSpace),
-			),
-			mpb.AppendDecorators(
-				// replace ETA decorator with "done" message, OnComplete event
-				decor.OnComplete(
-					// ETA decorator with ewma age of 60
-					decor.EwmaETA(decor.ET_STYLE_GO, 60), "done",
-				),
-			),
-		)
+		hbar := m.newBar(multi, hl, k)
 
 		go hmigrateKey(k, hbar, &wg)
 	}
@@ -231,6 +217,24 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 
 	go m.read(sc, ch)
 	m.write(ch, bar, &wg)
+}
+
+func (m *migrator) newBar(multi *mpb.Progress, length int64, name string) *mpb.Bar {
+	return multi.AddBar(length,
+		mpb.PrependDecorators(
+			// simple name decorator
+			decor.Name(name),
+			// decor.DSyncWidth bit enables column width synchronization
+			decor.Percentage(decor.WCSyncSpace),
+		),
+		mpb.AppendDecorators(
+			// replace ETA decorator with "done" message, OnComplete event
+			decor.OnComplete(
+				// ETA decorator with ewma age of 60
+				decor.EwmaETA(decor.ET_STYLE_GO, 60), "done",
+			),
+		),
+	)
 }
 
 func (m *migrator) read(sc scan, ch chan []string) {
