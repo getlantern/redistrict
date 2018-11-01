@@ -33,10 +33,8 @@ func TestHMigrate(t *testing.T) {
 			panic(err)
 		}
 	}
-	hm := &hmigrator{
-		key: testkey,
-	}
-	hm.hmigrate(nil, nil)
+	cmdKey = testkey
+	hmigrate(nil, nil)
 
 	for i := 0; i < 10000; i++ {
 		val, err := dclient.HGet(testkey, fmt.Sprintf("field-%d", i)).Result()

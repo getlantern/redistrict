@@ -10,11 +10,12 @@ import (
 )
 
 type hmigrator struct {
-	key    string
-	hcount int
+	key string
 }
 
-var hm = &hmigrator{}
+var hcount int
+
+var cmdKey string
 
 // hmigrateCmd is for migrating a particular hash to a new redis.
 var hmigrateCmd = &cobra.Command{
@@ -23,14 +24,14 @@ var hmigrateCmd = &cobra.Command{
 	Long: `Redis DUMP, RESTORE, and MIGRATE commands do not support hashes larger than 512MB. This
 uses HSCAN to migrate large hashes. This is essentially akin to a theoretical HMIGRATE redis
 command.`,
-	Run: hm.hmigrate,
+	Run: hmigrate,
 }
 
 func init() {
 	rootCmd.AddCommand(hmigrateCmd)
-	hmigrateCmd.Flags().StringVarP(&hm.key, "key", "k", "", "The key of the hash to migrate")
+	hmigrateCmd.Flags().StringVarP(&cmdKey, "key", "k", "", "The key of the hash to migrate")
 	hmigrateCmd.MarkFlagRequired("key")
-	hmigrateCmd.Flags().IntVarP(&hm.hcount, "hcount", "", 5000, "The number of hash entries to scan on each pass")
+	hmigrateCmd.Flags().IntVarP(&hcount, "hcount", "", 5000, "The number of hash entries to scan on each pass")
 }
 
 type hscan func(key string, cursor uint64, match string, count int64) *redis.ScanCmd
@@ -40,7 +41,7 @@ type hset func(key string, hmap map[string]interface{}) *redis.StatusCmd
 type hlen func(key string) *redis.IntCmd
 
 func hmigrateKey(k string, bar *pb.ProgressBar, wg *sync.WaitGroup) {
-	hm.key = k
+	var hm = &hmigrator{key: k}
 	hm.migrate(bar, wg)
 }
 
@@ -49,11 +50,13 @@ func (hm *hmigrator) migrate(bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen, bar, wg)
 }
 
-func (hm *hmigrator) hmigrate(cmd *cobra.Command, args []string) {
+func hmigrate(cmd *cobra.Command, args []string) {
 	// This is a dummy waitgroup. The waitgroup is really only used when migrating large hashes as
 	// a part of a larger migration.
 	var wg sync.WaitGroup
 	wg.Add(1)
+
+	var hm = &hmigrator{key: cmdKey}
 	hm.migrate(nil, &wg)
 }
 
@@ -78,7 +81,7 @@ func (hm *hmigrator) read(scan hscan, ch chan map[string]interface{}) {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = scan(hm.key, cursor, "", int64(hm.hcount)).Result()
+		keyvals, cursor, err = scan(hm.key, cursor, "", int64(hcount)).Result()
 		if err != nil {
 			panic(err)
 		}
