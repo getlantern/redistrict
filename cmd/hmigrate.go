@@ -5,9 +5,8 @@ import (
 	"sync"
 
 	"github.com/go-redis/redis"
-	"github.com/gosuri/uiprogress"
 	"github.com/spf13/cobra"
-	pb "gopkg.in/cheggaaa/pb.v2"
+	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 type hmigrator struct {
@@ -40,12 +39,12 @@ type hset func(key string, hmap map[string]interface{}) *redis.StatusCmd
 
 type hlen func(key string) *redis.IntCmd
 
-func hmigrateKey(k string, bar *uiprogress.Bar, wg *sync.WaitGroup) {
+func hmigrateKey(k string, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	hm.key = k
 	hm.migrate(bar, wg)
 }
 
-func (hm *hmigrator) migrate(bar *uiprogress.Bar, wg *sync.WaitGroup) {
+func (hm *hmigrator) migrate(bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	wg.Add(1)
 	hm.hmigrateWith(sclient.HScan, dclient.HMSet, sclient.HLen, bar, wg)
 }
@@ -68,17 +67,20 @@ type prog struct{}
 //func (p *prog) Finish() *pb.ProgressBar { return nil }
 //func (p *prog) Add(int) *pb.ProgressBar { return nil }
 
-func (hm *hmigrator) hmigrateWith(scan hscan, set hset, hl hlen, bar *uiprogress.Bar, wg *sync.WaitGroup) {
+func (hm *hmigrator) hmigrateWith(scan hscan, set hset, hl hlen, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	length, err := hl(hm.key).Result()
 	if err != nil {
 		panic(fmt.Sprintf("Could not get hash length %v", err))
 	}
 	if bar == nil {
-		//p := mpb.New()
-		uiprogress.Start()
-		bar = uiprogress.AddBar(int(length)).AppendFunc(func(b *uiprogress.Bar) string {
-			return hm.key
-		})
+		/*
+			p := mpb.New()
+			uiprogress.Start()
+			bar = uiprogress.AddBar(int(length)).AppendFunc(func(b *uiprogress.Bar) string {
+				return hm.key
+			})
+		*/
+		bar = pb.New(int(length))
 	}
 
 	ch := make(chan map[string]interface{})
@@ -110,7 +112,7 @@ func (hm *hmigrator) read(scan hscan, ch chan map[string]interface{}) {
 	}
 }
 
-func (hm *hmigrator) write(key string, set hset, ch chan map[string]interface{}, bar *uiprogress.Bar, wg *sync.WaitGroup) {
+func (hm *hmigrator) write(key string, set hset, ch chan map[string]interface{}, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for hmap := range ch {
 		status, err := set(key, hmap).Result()
@@ -118,11 +120,12 @@ func (hm *hmigrator) write(key string, set hset, ch chan map[string]interface{},
 			fmt.Printf("Error setting values on destination %v", err)
 			fmt.Printf("Status: %v", status)
 		} else {
-			bar.Set(bar.Current() + len(hmap))
+			//bar.Set(bar.Current() + len(hmap))
 			//bar.IncrBy(len(hmap))
+			bar.Add(len(hmap))
 		}
 	}
-	//bar.Finish()
+	bar.Finish()
 }
 
 func (hm *hmigrator) keyvalsToMap(keyvals []string) map[string]interface{} {

@@ -18,6 +18,7 @@ import (
 	"github.com/vbauerster/mpb"
 	"github.com/vbauerster/mpb/decor"
 	"go.uber.org/zap"
+	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 var logger *zap.SugaredLogger
@@ -205,10 +206,18 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 	//multi := mpb.New(mpb.WithWidth(80), mpb.WithWaitGroup(&wg))
 	wg.Add(1)
 
-	//bar := m.newBar(multi, length, "KEYS *")
-	bar := uiprogress.AddBar(int(length)).AppendFunc(func(b *uiprogress.Bar) string {
-		return "KEYS *"
-	})
+	/*
+		bar := m.newBar(multi, length, "KEYS *")
+		bar := uiprogress.AddBar(int(length)).AppendFunc(func(b *uiprogress.Bar) string {
+			return "KEYS *"
+		})
+	*/
+	bar := pb.New(int(length))
+
+	pool, err := pb.StartPool(bar)
+	if err != nil {
+		panic(err)
+	}
 
 	// Just include the length of the large hashes in the total length.
 	for k := range m.largeHashes {
@@ -217,10 +226,14 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 			panic(fmt.Sprintf("Could not get hash length for %v:\n %v", k, err))
 		}
 
-		//hbar := m.newBar(multi, hl, k)
-		hbar := uiprogress.AddBar(int(hl)).AppendFunc(func(b *uiprogress.Bar) string {
-			return k
-		})
+		/*
+			hbar := m.newBar(multi, hl, k)
+			hbar := uiprogress.AddBar(int(hl)).AppendFunc(func(b *uiprogress.Bar) string {
+				return k
+			})
+		*/
+		hbar := pb.New(int(hl))
+		pool.Add(hbar)
 
 		go hmigrateKey(k, hbar, &wg)
 	}
@@ -267,7 +280,7 @@ func (m *migrator) read(sc scan, ch chan []string) {
 	}
 }
 
-func (m *migrator) write(ch chan []string, bar *uiprogress.Bar, wg *sync.WaitGroup) {
+func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	type ktv struct {
 		key      string
 		ttlCmd   *redis.DurationCmd
@@ -316,7 +329,7 @@ func (m *migrator) write(ch chan []string, bar *uiprogress.Bar, wg *sync.WaitGro
 		if _, err := dpipeline.Exec(); err != nil {
 			panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
 		}
-		bar.Incr()
+		bar.Add(n)
 		//bar.Add(n)
 	}
 	wg.Done()
