@@ -15,8 +15,6 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/vbauerster/mpb"
-	"github.com/vbauerster/mpb/decor"
 	"go.uber.org/zap"
 	pb "gopkg.in/cheggaaa/pb.v1"
 )
@@ -125,19 +123,14 @@ func (m *migrator) writingToSelf() bool {
 
 // initRedis creates initial redis connections.
 func (m *migrator) initRedis() {
-	logger.Info("Initing redis")
-	dstart := time.Now()
 	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
 
 	if m.flushdst {
 		dclient.FlushDB()
 	}
-	logger.Infof("Initing redis flushed destination DB after %v", time.Since(dstart))
 
-	sstart := time.Now()
 	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.sslsrcCert)
 
-	logger.Infof("Initing redis created source connection after %v", time.Since(sstart))
 	// Note this is only exposed for tests to avoid letting the caller do something stupid...
 	if m.flushsrc {
 		//sclient.FlushDB()
@@ -194,24 +187,14 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 		fmt.Println("Source and destination databases cannot be the same. Consider using a different database ID.")
 		return
 	}
-	logger.Infof("Fetching length from client %v", sclient)
 	length, err := kl().Result()
-	logger.Infof("Fetched length from client %v", sclient)
 	if err != nil {
 		panic(fmt.Sprintf("Error getting source database size: %v", err))
 	}
 
 	uiprogress.Start()
 	var wg sync.WaitGroup
-	//multi := mpb.New(mpb.WithWidth(80), mpb.WithWaitGroup(&wg))
 	wg.Add(1)
-
-	/*
-		bar := m.newBar(multi, length, "KEYS *")
-		bar := uiprogress.AddBar(int(length)).AppendFunc(func(b *uiprogress.Bar) string {
-			return "KEYS *"
-		})
-	*/
 	bar := pb.New(int(length)).Prefix("KEYS *")
 
 	pool, err := pb.StartPool(bar)
@@ -225,13 +208,6 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 		if err != nil {
 			panic(fmt.Sprintf("Could not get hash length for %v:\n %v", k, err))
 		}
-
-		/*
-			hbar := m.newBar(multi, hl, k)
-			hbar := uiprogress.AddBar(int(hl)).AppendFunc(func(b *uiprogress.Bar) string {
-				return k
-			})
-		*/
 		hbar := pb.New(int(hl)).Prefix(k)
 		pool.Add(hbar)
 
@@ -242,20 +218,6 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 
 	go m.read(sc, ch)
 	m.write(ch, bar, &wg)
-}
-
-func (m *migrator) newBar(multi *mpb.Progress, length int64, name string) *mpb.Bar {
-	return multi.AddBar(length,
-		mpb.AppendDecorators(
-			// replace ETA decorator with "done" message, OnComplete event
-			decor.OnComplete(
-				// ETA decorator with ewma age of 60
-				decor.EwmaETA(decor.ET_STYLE_GO, 60), "done",
-			),
-			decor.Percentage(decor.WCSyncSpace),
-			decor.Name(fmt.Sprintf("  - %s", name)),
-		),
-	)
 }
 
 func (m *migrator) read(sc scan, ch chan []string) {

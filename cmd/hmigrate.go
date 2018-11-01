@@ -57,29 +57,12 @@ func (hm *hmigrator) hmigrate(cmd *cobra.Command, args []string) {
 	hm.migrate(nil, &wg)
 }
 
-type progress interface {
-	Finish() *pb.ProgressBar
-	Add(int) *pb.ProgressBar
-}
-
-type prog struct{}
-
-//func (p *prog) Finish() *pb.ProgressBar { return nil }
-//func (p *prog) Add(int) *pb.ProgressBar { return nil }
-
 func (hm *hmigrator) hmigrateWith(scan hscan, set hset, hl hlen, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 	length, err := hl(hm.key).Result()
 	if err != nil {
 		panic(fmt.Sprintf("Could not get hash length %v", err))
 	}
 	if bar == nil {
-		/*
-			p := mpb.New()
-			uiprogress.Start()
-			bar = uiprogress.AddBar(int(length)).AppendFunc(func(b *uiprogress.Bar) string {
-				return hm.key
-			})
-		*/
 		bar = pb.New(int(length))
 	}
 
@@ -120,8 +103,6 @@ func (hm *hmigrator) write(key string, set hset, ch chan map[string]interface{},
 			fmt.Printf("Error setting values on destination %v", err)
 			fmt.Printf("Status: %v", status)
 		} else {
-			//bar.Set(bar.Current() + len(hmap))
-			//bar.IncrBy(len(hmap))
 			bar.Add(len(hmap))
 		}
 	}
