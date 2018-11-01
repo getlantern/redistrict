@@ -212,7 +212,7 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 			return "KEYS *"
 		})
 	*/
-	bar := pb.New(int(length))
+	bar := pb.New(int(length)).Prefix("KEYS *")
 
 	pool, err := pb.StartPool(bar)
 	if err != nil {
@@ -232,7 +232,7 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 				return k
 			})
 		*/
-		hbar := pb.New(int(hl))
+		hbar := pb.New(int(hl)).Prefix(k)
 		pool.Add(hbar)
 
 		go hmigrateKey(k, hbar, &wg)
@@ -332,6 +332,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 		bar.Add(n)
 		//bar.Add(n)
 	}
+	bar.Finish()
 	wg.Done()
 	logger.Infof("Waiting on %v large hashes to complete transferring", largeKeyCount)
 	wg.Wait()
