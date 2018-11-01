@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
+	"github.com/gosuri/uiprogress"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -199,11 +200,15 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 		panic(fmt.Sprintf("Error getting source database size: %v", err))
 	}
 
+	uiprogress.Start()
 	var wg sync.WaitGroup
-	multi := mpb.New(mpb.WithWidth(80), mpb.WithWaitGroup(&wg))
+	//multi := mpb.New(mpb.WithWidth(80), mpb.WithWaitGroup(&wg))
 	wg.Add(1)
 
-	bar := m.newBar(multi, length, "KEYS *")
+	//bar := m.newBar(multi, length, "KEYS *")
+	bar := uiprogress.AddBar(int(length)).AppendFunc(func(b *uiprogress.Bar) string {
+		return "KEYS *"
+	})
 
 	// Just include the length of the large hashes in the total length.
 	for k := range m.largeHashes {
@@ -212,7 +217,10 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 			panic(fmt.Sprintf("Could not get hash length for %v:\n %v", k, err))
 		}
 
-		hbar := m.newBar(multi, hl, k)
+		//hbar := m.newBar(multi, hl, k)
+		hbar := uiprogress.AddBar(int(hl)).AppendFunc(func(b *uiprogress.Bar) string {
+			return k
+		})
 
 		go hmigrateKey(k, hbar, &wg)
 	}
@@ -259,7 +267,7 @@ func (m *migrator) read(sc scan, ch chan []string) {
 	}
 }
 
-func (m *migrator) write(ch chan []string, bar *mpb.Bar, wg *sync.WaitGroup) {
+func (m *migrator) write(ch chan []string, bar *uiprogress.Bar, wg *sync.WaitGroup) {
 	type ktv struct {
 		key      string
 		ttlCmd   *redis.DurationCmd
@@ -308,7 +316,7 @@ func (m *migrator) write(ch chan []string, bar *mpb.Bar, wg *sync.WaitGroup) {
 		if _, err := dpipeline.Exec(); err != nil {
 			panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
 		}
-		bar.IncrBy(n)
+		bar.Incr()
 		//bar.Add(n)
 	}
 	wg.Done()
