@@ -1,0 +1,60 @@
+package cmd
+
+import (
+	"sync"
+
+	"github.com/spf13/cobra"
+	pb "gopkg.in/cheggaaa/pb.v1"
+)
+
+type smigrator struct {
+	key string
+}
+
+var scount int
+
+// smigrateCmd is for migrating a particular hash to a new redis.
+var smigrateCmd = &cobra.Command{
+	Use:   "smigrate",
+	Short: "Migrate a large set at the specified key",
+	Long: `Redis DUMP, RESTORE, and MIGRATE commands do not support key values larger than 512MB. This
+uses HSCAN to migrate large hashes. This is essentially akin to a theoretical SMIGRATE redis
+command.`,
+	Run: smigrate,
+}
+
+func init() {
+	rootCmd.AddCommand(smigrateCmd)
+	smigrateCmd.Flags().StringVarP(&cmdKey, "key", "k", "", "The key of the set to migrate")
+	smigrateCmd.MarkFlagRequired("key")
+	smigrateCmd.Flags().IntVarP(&scount, "scount", "", 5000, "The number of set entries to scan on each pass")
+}
+
+func smigrate(cmd *cobra.Command, args []string) {
+	// This is a dummy waitgroup. The waitgroup is really only used when migrating large hashes as
+	// a part of a larger migration.
+	var wg sync.WaitGroup
+	var sm = &smigrator{key: cmdKey}
+	sm.migrate(nil, &wg)
+}
+
+func smigrateKey(k string, bar *pb.ProgressBar, wg *sync.WaitGroup) {
+	var sm = &smigrator{key: k}
+	sm.migrate(bar, wg)
+}
+
+func (sm *smigrator) migrate(bar *pb.ProgressBar, wg *sync.WaitGroup) int {
+	return genericMigrateWith(sm.key, sclient.SScan, sm.migrateKeyVals,
+		sclient.SCard, bar, wg)
+}
+
+func (sm *smigrator) migrateKeyVals(key string, keyvals []string) resultable {
+	return func() error {
+		if len(keyvals) == 0 {
+			return nil
+		}
+		cmd := dclient.SAdd(key, keyvals)
+		_, err := cmd.Result()
+		return err
+	}
+}

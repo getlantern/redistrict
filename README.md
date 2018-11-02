@@ -1,7 +1,19 @@
 [![CircleCI](https://circleci.com/gh/getlantern/redistrict.svg?style=svg)](https://circleci.com/gh/getlantern/redistrict)
 
 ## redistrict
-CLI utility written in Go for migrating redis data. You can install it with:
+CLI utility written in Go for migrating redis data. Redistrict is particularly useful if you need
+to migrate large values (over 512MBs) that otherwise cannot be migrated with DUMP and RESTORE.
+Redistrict migrates those "manually" using the relevant SCAN variants, such as HSCAN and SSCAN, along
+with the related bulk write methods, such as HMSET and SADD. Uses pipelining where appropriate and
+performs migrations of general keys and large keys in parallel.
+
+To find large keys in your database you can run:
+
+```
+./redis-cli --bigkeys
+```
+
+You can install redistrict with:
 
 ```
 go get -u github.com/getlantern/redistrict
@@ -14,7 +26,7 @@ access to the destination machine. This uses DUMP and RESTORE for all keys excep
 specifies key names of large hashes to migrate separately, as DUMP and RESTORE don't support hashes larger
 than 512MBs. More details are at https://github.com/antirez/redis/issues/757
 
-You can specify large hashes using the --hashKeys flag or by specifying large-hashes in $HOME/.redistrict.yaml, as in:
+You can specify large hashes using the `--hashKeys` flag or by specifying large-hashes in `$HOME/.redistrict.yaml`, as in:
 
 ```
 large-hashes:

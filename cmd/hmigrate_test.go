@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,10 +35,15 @@ func TestHMigrate(t *testing.T) {
 		}
 	}
 	cmdKey = testkey
-	hmigrate(nil, nil)
+	var wg sync.WaitGroup
+	var hm = &hmigrator{key: cmdKey}
+	hm.migrate(nil, &wg)
 
 	for i := 0; i < 10000; i++ {
-		val, err := dclient.HGet(testkey, fmt.Sprintf("field-%d", i)).Result()
+		//logger.Debugf("dclient %v", dclient)
+		get := dclient.HGet(testkey, fmt.Sprintf("field-%d", i))
+		//logger.Debugf("get '%v'", get)
+		val, err := get.Result()
 		if err != nil {
 			panic(err)
 		}

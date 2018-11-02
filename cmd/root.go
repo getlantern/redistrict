@@ -43,6 +43,10 @@ type migrator struct {
 
 	tempHashes []string
 
+	largeSets map[string]bool
+
+	tempSets []string
+
 	count int
 }
 
@@ -51,6 +55,8 @@ var mig = &migrator{
 	dst:         "127.0.0.1:6379",
 	largeHashes: make(map[string]bool),
 	tempHashes:  make([]string, 0),
+	largeSets:   make(map[string]bool),
+	tempSets:    make([]string, 0),
 }
 
 // Source redis client.
@@ -176,6 +182,14 @@ func (m *migrator) migrate(cmd *cobra.Command, args []string) {
 		m.largeHashes = make(map[string]bool)
 		for _, hash := range m.tempHashes {
 			m.largeHashes[hash] = true
+		}
+	}
+
+	if len(m.tempSets) > 0 {
+		// Just make sure the command line fully overrides the config file.
+		m.largeSets = make(map[string]bool)
+		for _, set := range m.tempSets {
+			m.largeSets[set] = true
 		}
 	}
 
@@ -325,6 +339,10 @@ func (m *migrator) initConfig() {
 		hashes := viper.GetStringSlice("large-hashes")
 		for _, hash := range hashes {
 			m.largeHashes[hash] = true
+		}
+		sets := viper.GetStringSlice("large-sets")
+		for _, set := range sets {
+			m.largeSets[set] = true
 		}
 	}
 }
