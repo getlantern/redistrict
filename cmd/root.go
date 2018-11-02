@@ -102,6 +102,8 @@ func init() {
 
 	rootCmd.PersistentFlags().StringSliceVar(&mig.tempHashes, "hashKeys", make([]string, 0),
 		"Key names of large hashes to automatically call hmigrate on, in the form --hashKeys=\"k1,k2\"")
+	rootCmd.PersistentFlags().StringSliceVar(&mig.tempSets, "setKeys", make([]string, 0),
+		"Key names of large sets to automatically call smigrate on, in the form --setKeys=\"k1,k2\"")
 	rootCmd.PersistentFlags().StringVar(&mig.cfgFile, "config", "", "config file (default is $HOME/.redistrict.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&mig.src, "src", "s", "127.0.0.1:6379", "Source redis host IP/name")
 	rootCmd.PersistentFlags().StringVarP(&mig.dst, "dst", "d", "127.0.0.1:6379", "Destination redis host IP/name")
