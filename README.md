@@ -7,6 +7,8 @@ Redistrict migrates those "manually" using the relevant SCAN variants, such as H
 with the related bulk write methods, such as HMSET and SADD. Uses pipelining where appropriate and
 performs migrations of general keys and large keys in parallel.
 
+NOTE THIS DOES NOT CURRENTLY SUPPORT MIGRATING LARGE SORTED SETS.
+
 To find large keys in your database you can run:
 
 ```
@@ -26,16 +28,22 @@ access to the destination machine. This uses DUMP and RESTORE for all keys excep
 specifies key names of large hashes to migrate separately, as DUMP and RESTORE don't support hashes larger
 than 512MBs. More details are at https://github.com/antirez/redis/issues/757
 
-You can specify large hashes using the `--hashKeys` flag or by specifying large-hashes in `$HOME/.redistrict.yaml`, as in:
+You can specify large hashes using the --hashKeys, --setKeys, or --listKeys flags or by
+specifying similar in $HOME/.redistrict.yaml, as in:
 
 ```
-large-hashes:
+hashKeys:
+  - key->value
+  - largeHash
+  - evenLarger
+
+setKeys:
   - key->value
   - largeHash
   - evenLarger
 ```
 
-The command line flags override the config file.
+The command line flags override the config file. DOES NOT CURRENTLY SUPPORT SORTED SETS.
 
 ```
 redistrict [flags]
@@ -45,12 +53,15 @@ redistrict [flags]
 
 ```
       --config string       config file (default is $HOME/.redistrict.yaml)
+      --count int           The number of keys to scan on each pass (default 5000)
   -d, --dst string          Destination redis host IP/name (default "127.0.0.1:6379")
       --dstauth string      Destination redis password
       --dstdb int           Redis db number, defaults to 0
       --flushdst            Flush the destination db before doing anything
       --hashKeys strings    Key names of large hashes to automatically call hmigrate on, in the form --hashKeys="k1,k2"
   -h, --help                help for redistrict
+      --listKeys strings    Key names of large lists to automatically call lmigrate on, in the form --listKeys="k1,k2"
+      --setKeys strings     Key names of large sets to automatically call smigrate on, in the form --setKeys="k1,k2"
   -s, --src string          Source redis host IP/name (default "127.0.0.1:6379")
       --srcauth string      Source redis password
       --srcdb int           Redis db number, defaults to 0
@@ -61,3 +72,5 @@ redistrict [flags]
 ### SEE ALSO
 
 * [redistrict hmigrate](redistrict_hmigrate.md)	 - Migrate a large hash at the specified key
+* [redistrict lmigrate](redistrict_lmigrate.md)	 - Migrate a large list at the specified key
+* [redistrict smigrate](redistrict_smigrate.md)	 - Migrate a large set at the specified key

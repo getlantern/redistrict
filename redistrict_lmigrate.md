@@ -1,23 +1,23 @@
-## redistrict hmigrate
+## redistrict lmigrate
 
-Migrate a large hash at the specified key
+Migrate a large list at the specified key
 
 ### Synopsis
 
-Redis DUMP, RESTORE, and MIGRATE commands do not support hashes larger than 512MB. This
-uses HSCAN to migrate large hashes. This is essentially akin to a theoretical HMIGRATE redis
+Redis DUMP, RESTORE, and MIGRATE commands do not support key values larger than 512MB. This
+uses LRANGE to migrate large lists. This is essentially akin to a theoretical LMIGRATE redis
 command.
 
 ```
-redistrict hmigrate [flags]
+redistrict lmigrate [flags]
 ```
 
 ### Options
 
 ```
-      --hcount int   The number of hash entries to scan on each pass (default 5000)
-  -h, --help         help for hmigrate
-  -k, --key string   The key of the hash to migrate
+  -h, --help         help for lmigrate
+  -k, --key string   The key of the list to migrate
+      --lcount int   The number of list entries to scan on each pass (default 5000)
 ```
 
 ### Options inherited from parent commands

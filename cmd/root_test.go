@@ -23,15 +23,10 @@ func TestConfig(t *testing.T) {
 	assert.Equal(t, 0, len(empty))
 
 	/*
-		err := doc.GenMarkdownTree(rootCmd, "")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = doc.GenMarkdownTree(hmigrateCmd, "")
-		if err != nil {
-			log.Fatal(err)
-		}
+		doc.GenMarkdownTree(rootCmd, "")
+		doc.GenMarkdownTree(hmigrateCmd, "")
+		doc.GenMarkdownTree(lmigrateCmd, "")
+		doc.GenMarkdownTree(smigrateCmd, "")
 	*/
 }
 
