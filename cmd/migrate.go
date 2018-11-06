@@ -10,7 +10,7 @@ import (
 
 var cmdKey string
 
-type gscan func(key string, cursor uint64, match string, count int64) *redis.ScanCmd
+type gscan func(key string, cursor uint64, match string, count int64) ([]string, uint64, error)
 type gset func(key string, keyvals []string) resultable
 type glen func(key string) *redis.IntCmd
 
@@ -41,10 +41,11 @@ func genericMigrateWith(key string, scan gscan, set gset, gl glen, bar *pb.Progr
 func genericRead(key string, scan gscan, ch chan []string) {
 	var cursor uint64
 	var n int64
+	//for i := 0; i < 10; i++ {
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = scan(key, cursor, "", int64(hcount)).Result()
+		keyvals, cursor, err = scan(key, cursor, "", int64(hcount))
 		if err != nil {
 			panic(err)
 		}

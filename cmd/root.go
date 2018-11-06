@@ -47,23 +47,24 @@ type migrator struct {
 
 	tempSets []string
 
+	largeLists map[string]bool
+
+	tempLists []string
+
 	count int
 }
 
-var mig = &migrator{
-	src:         "127.0.0.1:6379",
-	dst:         "127.0.0.1:6379",
-	largeHashes: make(map[string]bool),
-	tempHashes:  make([]string, 0),
-	largeSets:   make(map[string]bool),
-	tempSets:    make([]string, 0),
-}
+var mig = newMigrator()
 
 // Source redis client.
 var sclient *redis.Client
 
 // Destination redis client.
 var dclient *redis.Client
+
+const hashKeys = "hashKeys"
+const setKeys = "setKeys"
+const listKeys = "listKeys"
 
 // rootCmd migrates from one database to another using DUMP and RESTORE and including support for
 // large hashes.
@@ -75,14 +76,20 @@ access to the destination machine. This uses DUMP and RESTORE for all keys excep
 specifies key names of large hashes to migrate separately, as DUMP and RESTORE don't support hashes larger
 than 512MBs. More details are at https://github.com/antirez/redis/issues/757
 
-You can specify large hashes using the --hashKeys flag or by specifying large-hashes in $HOME/.redistrict.yaml, as in:
+You can specify large hashes using the --hashKeys, --setKeys, or --listKeys flags or by
+specifying similar in $HOME/.redistrict.yaml, as in:
 
-large-hashes:
+hashKeys:
   - key->value
   - largeHash
   - evenLarger
 
-The command line flags override the config file.`,
+setKeys:
+  - key->value
+  - largeHash
+  - evenLarger
+
+The command line flags override the config file. DOES NOT CURRENTLY SUPPORT SORTED SETS.`,
 	Run: mig.migrate,
 }
 
@@ -100,10 +107,12 @@ func init() {
 	logger = dev.Sugar()
 	cobra.OnInitialize(mig.initAll)
 
-	rootCmd.PersistentFlags().StringSliceVar(&mig.tempHashes, "hashKeys", make([]string, 0),
+	rootCmd.PersistentFlags().StringSliceVar(&mig.tempHashes, hashKeys, make([]string, 0),
 		"Key names of large hashes to automatically call hmigrate on, in the form --hashKeys=\"k1,k2\"")
-	rootCmd.PersistentFlags().StringSliceVar(&mig.tempSets, "setKeys", make([]string, 0),
+	rootCmd.PersistentFlags().StringSliceVar(&mig.tempSets, setKeys, make([]string, 0),
 		"Key names of large sets to automatically call smigrate on, in the form --setKeys=\"k1,k2\"")
+	rootCmd.PersistentFlags().StringSliceVar(&mig.tempLists, listKeys, make([]string, 0),
+		"Key names of large lists to automatically call lmigrate on, in the form --listKeys=\"k1,k2\"")
 	rootCmd.PersistentFlags().StringVar(&mig.cfgFile, "config", "", "config file (default is $HOME/.redistrict.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&mig.src, "src", "s", "127.0.0.1:6379", "Source redis host IP/name")
 	rootCmd.PersistentFlags().StringVarP(&mig.dst, "dst", "d", "127.0.0.1:6379", "Destination redis host IP/name")
@@ -117,6 +126,20 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVarP(&mig.flushdst, "flushdst", "", false, "Flush the destination db before doing anything")
 	rootCmd.Flags().IntVarP(&mig.count, "count", "", 5000, "The number of keys to scan on each pass")
+}
+
+// newMigrator returns a new empty migrator.
+func newMigrator() *migrator {
+	return &migrator{
+		src:         "127.0.0.1:6379",
+		dst:         "127.0.0.1:6379",
+		largeHashes: make(map[string]bool),
+		tempHashes:  make([]string, 0),
+		largeSets:   make(map[string]bool),
+		tempSets:    make([]string, 0),
+		largeLists:  make(map[string]bool),
+		tempLists:   make([]string, 0),
+	}
 }
 
 // initAll initializes any necessary services, such as config and redis.
@@ -179,21 +202,10 @@ type scan func(cursor uint64, match string, count int64) *redis.ScanCmd
 type klen func() *redis.IntCmd
 
 func (m *migrator) migrate(cmd *cobra.Command, args []string) {
-	if len(m.tempHashes) > 0 {
-		// Just make sure the command line fully overrides the config file.
-		m.largeHashes = make(map[string]bool)
-		for _, hash := range m.tempHashes {
-			m.largeHashes[hash] = true
-		}
-	}
 
-	if len(m.tempSets) > 0 {
-		// Just make sure the command line fully overrides the config file.
-		m.largeSets = make(map[string]bool)
-		for _, set := range m.tempSets {
-			m.largeSets[set] = true
-		}
-	}
+	m.largeHashes = m.integrateConfigSettings(m.tempHashes, m.largeHashes)
+	m.largeSets = m.integrateConfigSettings(m.tempSets, m.largeSets)
+	m.largeLists = m.integrateConfigSettings(m.tempLists, m.largeLists)
 
 	m.migrateWith(sclient.Scan, sclient.DBSize)
 }
@@ -338,13 +350,31 @@ func (m *migrator) initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		hashes := viper.GetStringSlice("large-hashes")
-		for _, hash := range hashes {
-			m.largeHashes[hash] = true
-		}
-		sets := viper.GetStringSlice("large-sets")
-		for _, set := range sets {
-			m.largeSets[set] = true
-		}
+		m.populateKeyMap(hashKeys, m.largeHashes)
+		m.populateKeyMap(setKeys, m.largeSets)
+		m.populateKeyMap(listKeys, m.largeLists)
 	}
+}
+
+func (m *migrator) populateKeyMap(keysName string, keysMap map[string]bool) {
+	m.populateKeyMapFrom(keysName, viper.GetStringSlice, keysMap)
+}
+
+func (m *migrator) populateKeyMapFrom(keysName string, sliceFunc func(string) []string, keysMap map[string]bool) {
+	keys := sliceFunc(keysName)
+	for _, k := range keys {
+		keysMap[k] = true
+	}
+}
+
+func (m *migrator) integrateConfigSettings(keys []string, keysMap map[string]bool) map[string]bool {
+	if len(keys) > 0 {
+		// Just make sure the command line fully overrides the config file.
+		kmap := make(map[string]bool)
+		for _, set := range keys {
+			kmap[set] = true
+		}
+		return kmap
+	}
+	return keysMap
 }

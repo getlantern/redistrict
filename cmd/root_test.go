@@ -35,6 +35,35 @@ func TestConfig(t *testing.T) {
 	*/
 }
 
+func TestIntegrateConfigSettings(t *testing.T) {
+
+	keys := []string{"1", "2", "3"}
+	kmap := map[string]bool{"4": true}
+
+	migr := newMigrator()
+	k := migr.integrateConfigSettings(keys, kmap)
+	assert.Equal(t, 3, len(k))
+	assert.True(t, k["1"])
+	assert.True(t, k["3"])
+	assert.False(t, k["4"])
+}
+
+func TestPopulateKeyMap(t *testing.T) {
+
+	keys := []string{"1", "2", "3"}
+	kmap := map[string]bool{}
+
+	migr := newMigrator()
+
+	migr.populateKeyMapFrom("keysName", func(arg1 string) []string {
+		return keys
+	}, kmap)
+
+	assert.True(t, kmap["1"])
+	assert.True(t, kmap["3"])
+	assert.False(t, kmap["4"])
+}
+
 func TestRootMigrate(t *testing.T) {
 	var m = &migrator{
 		src:         "127.0.0.1:6379",

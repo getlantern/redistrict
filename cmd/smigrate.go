@@ -18,7 +18,7 @@ var smigrateCmd = &cobra.Command{
 	Use:   "smigrate",
 	Short: "Migrate a large set at the specified key",
 	Long: `Redis DUMP, RESTORE, and MIGRATE commands do not support key values larger than 512MB. This
-uses HSCAN to migrate large hashes. This is essentially akin to a theoretical SMIGRATE redis
+uses HSCAN to migrate large sets. This is essentially akin to a theoretical SMIGRATE redis
 command.`,
 	Run: smigrate,
 }
@@ -44,8 +44,12 @@ func smigrateKey(k string, bar *pb.ProgressBar, wg *sync.WaitGroup) {
 }
 
 func (sm *smigrator) migrate(bar *pb.ProgressBar, wg *sync.WaitGroup) int {
-	return genericMigrateWith(sm.key, sclient.SScan, sm.migrateKeyVals,
+	return genericMigrateWith(sm.key, sm.sscan, sm.migrateKeyVals,
 		sclient.SCard, bar, wg)
+}
+
+func (sm *smigrator) sscan(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {
+	return sclient.SScan(key, cursor, match, count).Result()
 }
 
 func (sm *smigrator) migrateKeyVals(key string, keyvals []string) resultable {

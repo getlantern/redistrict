@@ -44,8 +44,12 @@ func hmigrateKey(k string, bar *pb.ProgressBar, wg *sync.WaitGroup) int {
 }
 
 func (hm *hmigrator) migrate(bar *pb.ProgressBar, wg *sync.WaitGroup) int {
-	return genericMigrateWith(hm.key, sclient.HScan, hm.migrateKeyVals,
+	return genericMigrateWith(hm.key, hm.hscan, hm.migrateKeyVals,
 		sclient.HLen, bar, wg)
+}
+
+func (hm *hmigrator) hscan(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {
+	return sclient.HScan(key, cursor, match, count).Result()
 }
 
 func (hm *hmigrator) migrateKeyVals(key string, keyvals []string) resultable {
