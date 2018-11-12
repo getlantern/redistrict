@@ -19,15 +19,17 @@ type resultable func() error
 type keyValHandler func(key string, scan gscan, set gset, gl glen, bar *pb.ProgressBar,
 	wg *sync.WaitGroup) int
 
-func genericMigrateWith(key string, scan gscan, set gset, gl glen, bar *pb.ProgressBar,
-	wg *sync.WaitGroup) int {
+func genericMigrateWith(key string, scan gscan, set gset, gl glen,
+	wg *sync.WaitGroup, pool *pb.Pool) int {
 	wg.Add(1)
+
 	length, err := gl(key).Result()
 	if err != nil {
 		panic(fmt.Sprintf("Could not get length %v", err))
 	}
-	if bar == nil {
-		bar = pb.New(int(length))
+	bar := pb.New(int(length))
+	if pool != nil {
+		pool.Add(bar)
 	}
 
 	ch := make(chan []string)

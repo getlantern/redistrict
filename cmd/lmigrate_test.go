@@ -38,7 +38,7 @@ func TestLMigrate(t *testing.T) {
 	cmdKey = testkey
 	var wg sync.WaitGroup
 	var lm = &lmigrator{key: cmdKey}
-	lm.migrate(nil, &wg)
+	lm.migrate(&wg, nil)
 
 	logger.Debugf("Migrated test list...%v", dclient.LLen(testkey).Val())
 

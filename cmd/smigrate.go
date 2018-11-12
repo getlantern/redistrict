@@ -35,17 +35,17 @@ func smigrate(cmd *cobra.Command, args []string) {
 	// a part of a larger migration.
 	var wg sync.WaitGroup
 	var sm = &smigrator{key: cmdKey}
-	sm.migrate(nil, &wg)
+	sm.migrate(&wg, nil)
 }
 
-func smigrateKey(k string, bar *pb.ProgressBar, wg *sync.WaitGroup) {
+func smigrateKey(k string, wg *sync.WaitGroup, pool *pb.Pool) {
 	var sm = &smigrator{key: k}
-	sm.migrate(bar, wg)
+	sm.migrate(wg, pool)
 }
 
-func (sm *smigrator) migrate(bar *pb.ProgressBar, wg *sync.WaitGroup) int {
+func (sm *smigrator) migrate(wg *sync.WaitGroup, pool *pb.Pool) int {
 	return genericMigrateWith(sm.key, sm.sscan, sm.migrateKeyVals,
-		sclient.SCard, bar, wg)
+		sclient.SCard, wg, pool)
 }
 
 func (sm *smigrator) sscan(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {

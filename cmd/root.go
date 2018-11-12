@@ -154,12 +154,15 @@ func (m *migrator) writingToSelf() bool {
 
 // initRedis creates initial redis connections.
 func (m *migrator) initRedis() {
-	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
-
 	if m.flushdst {
-		dclient.FlushDB()
+		// Flush with a separate client because it can take ahwile on large DBs and can cause
+		// timeouts to be hit.
+		flushclient := m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
+		flushclient.FlushDB()
+		flushclient.Close()
 	}
 
+	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
 	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.sslsrcCert)
 
 	// Note this is only exposed for tests to avoid letting the caller do something stupid...
@@ -230,16 +233,16 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 		panic(err)
 	}
 
-	// Just include the length of the large hashes in the total length.
 	for k := range m.largeHashes {
-		hl, err := sclient.HLen(k).Result()
-		if err != nil {
-			panic(fmt.Sprintf("Could not get hash length for %v:\n %v", k, err))
-		}
-		hbar := pb.New(int(hl)).Prefix(k)
-		pool.Add(hbar)
+		go hmigrateKey(k, &wg, pool)
+	}
 
-		go hmigrateKey(k, hbar, &wg)
+	for k := range m.largeSets {
+		go smigrateKey(k, &wg, pool)
+	}
+
+	for k := range m.largeLists {
+		go lmigrateKey(k, &wg, pool)
 	}
 
 	ch := make(chan []string)

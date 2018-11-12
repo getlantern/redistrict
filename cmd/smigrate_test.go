@@ -37,7 +37,7 @@ func TestSMigrate(t *testing.T) {
 	cmdKey = testkey
 	var wg sync.WaitGroup
 	var hm = &smigrator{key: cmdKey}
-	hm.migrate(nil, &wg)
+	hm.migrate(&wg, nil)
 
 	vals, err := dclient.SMembers(testkey).Result()
 	assert.NoError(t, err)
