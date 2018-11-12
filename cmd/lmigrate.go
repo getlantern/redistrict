@@ -56,8 +56,6 @@ func (lm *lmigrator) lscan(key string, cursor uint64, match string, count int64)
 	// though, the cursor inherently starts at 0 and can never add more than count, which are both
 	// int64s, and presumably the size of lists is limited to a int64, so we should be good.
 	keyvals, err := sclient.LRange(key, int64(cursor), int64(newCursor)).Result()
-	logger.Debugf("Got results...start %v, stop %v", int64(cursor), int64(newCursor))
-	logger.Debugf("Error? %v length: %v", err, sclient.LLen(key))
 
 	// The returned values having zero length indicates having iterated past the end of the list, so
 	// return a cursor of 0, which is the signifier to break out of the loop for SCAN methods the
@@ -74,7 +72,6 @@ func (lm *lmigrator) migrateKeyVals(key string, keyvals []string) resultable {
 			return nil
 		}
 		cmd := dclient.LPush(key, keyvals)
-		logger.Debug("Pushed...")
 		_, err := cmd.Result()
 		return err
 	}
