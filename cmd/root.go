@@ -39,17 +39,13 @@ type migrator struct {
 	flushdst bool
 	flushsrc bool
 
-	largeHashes map[string]bool
+	largeKeys map[string]migFunc
 
 	tempHashes []string
 
-	largeSets map[string]bool
+	tempLists []string
 
 	tempSets []string
-
-	largeLists map[string]bool
-
-	tempLists []string
 
 	count int
 }
@@ -131,14 +127,12 @@ func init() {
 // newMigrator returns a new empty migrator.
 func newMigrator() *migrator {
 	return &migrator{
-		src:         "127.0.0.1:6379",
-		dst:         "127.0.0.1:6379",
-		largeHashes: make(map[string]bool),
-		tempHashes:  make([]string, 0),
-		largeSets:   make(map[string]bool),
-		tempSets:    make([]string, 0),
-		largeLists:  make(map[string]bool),
-		tempLists:   make([]string, 0),
+		src:        "127.0.0.1:6379",
+		dst:        "127.0.0.1:6379",
+		largeKeys:  make(map[string]migFunc),
+		tempHashes: make([]string, 0),
+		tempLists:  make([]string, 0),
+		tempSets:   make([]string, 0),
 	}
 }
 
@@ -206,11 +200,17 @@ type klen func() *redis.IntCmd
 
 func (m *migrator) migrate(cmd *cobra.Command, args []string) {
 
-	m.largeHashes = m.integrateConfigSettings(m.tempHashes, m.largeHashes)
-	m.largeSets = m.integrateConfigSettings(m.tempSets, m.largeSets)
-	m.largeLists = m.integrateConfigSettings(m.tempLists, m.largeLists)
+	m.integrateConfigSettings(m.tempHashes, hmigrateKey)
+	m.integrateConfigSettings(m.tempSets, smigrateKey)
+	m.integrateConfigSettings(m.tempLists, lmigrateKey)
 
 	m.migrateWith(sclient.Scan, sclient.DBSize)
+}
+
+func (m *migrator) integrateConfigSettings(keys []string, mFunc migFunc) {
+	for _, set := range keys {
+		m.largeKeys[set] = mFunc
+	}
 }
 
 func (m *migrator) migrateWith(sc scan, kl klen) {
@@ -233,16 +233,8 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 		panic(err)
 	}
 
-	for k := range m.largeHashes {
-		go hmigrateKey(k, &wg, pool)
-	}
-
-	for k := range m.largeSets {
-		go smigrateKey(k, &wg, pool)
-	}
-
-	for k := range m.largeLists {
-		go lmigrateKey(k, &wg, pool)
+	for k, migrateFunc := range m.largeKeys {
+		go migrateFunc(k, &wg, pool)
 	}
 
 	ch := make(chan []string)
@@ -288,8 +280,8 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 		n := len(keyvals)
 		for i := 0; i < n; i++ {
 			key := keyvals[i]
-			if _, ok := m.largeHashes[key]; ok {
-				logger.Infof("Separately migrating large hash at %v", key)
+			if _, ok := m.largeKeys[key]; ok {
+				logger.Infof("Separately migrating large key at %v", key)
 				largeKeyCount++
 				continue
 			}
@@ -353,31 +345,22 @@ func (m *migrator) initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		m.populateKeyMap(hashKeys, m.largeHashes)
-		m.populateKeyMap(setKeys, m.largeSets)
-		m.populateKeyMap(listKeys, m.largeLists)
+		m.populateKeyMap(hashKeys, hmigrateKey)
+		m.populateKeyMap(setKeys, smigrateKey)
+		m.populateKeyMap(listKeys, lmigrateKey)
 	}
 }
 
-func (m *migrator) populateKeyMap(keysName string, keysMap map[string]bool) {
-	m.populateKeyMapFrom(keysName, viper.GetStringSlice, keysMap)
+type migFunc func(string, *sync.WaitGroup, *pb.Pool) int
+
+func (m *migrator) populateKeyMap(keysName string, mFunc migFunc) {
+	m.populateKeyMapFrom(keysName, viper.GetStringSlice, mFunc)
 }
 
-func (m *migrator) populateKeyMapFrom(keysName string, sliceFunc func(string) []string, keysMap map[string]bool) {
+func (m *migrator) populateKeyMapFrom(keysName string, sliceFunc func(string) []string,
+	mFunc migFunc) {
 	keys := sliceFunc(keysName)
 	for _, k := range keys {
-		keysMap[k] = true
+		m.largeKeys[k] = mFunc
 	}
-}
-
-func (m *migrator) integrateConfigSettings(keys []string, keysMap map[string]bool) map[string]bool {
-	if len(keys) > 0 {
-		// Just make sure the command line fully overrides the config file.
-		kmap := make(map[string]bool)
-		for _, set := range keys {
-			kmap[set] = true
-		}
-		return kmap
-	}
-	return keysMap
 }

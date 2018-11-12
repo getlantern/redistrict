@@ -38,9 +38,9 @@ func smigrate(cmd *cobra.Command, args []string) {
 	sm.migrate(&wg, nil)
 }
 
-func smigrateKey(k string, wg *sync.WaitGroup, pool *pb.Pool) {
+func smigrateKey(k string, wg *sync.WaitGroup, pool *pb.Pool) int {
 	var sm = &smigrator{key: k}
-	sm.migrate(wg, pool)
+	return sm.migrate(wg, pool)
 }
 
 func (sm *smigrator) migrate(wg *sync.WaitGroup, pool *pb.Pool) int {

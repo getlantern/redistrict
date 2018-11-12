@@ -13,12 +13,7 @@ import (
 // creates a redis instance inside docker, or you need to have a locally running redis on the
 // default port.
 func TestLMigrate(t *testing.T) {
-	var m = &migrator{
-		src:         "127.0.0.1:6379",
-		dst:         "127.0.0.1:6379",
-		largeHashes: make(map[string]bool),
-		tempHashes:  make([]string, 0),
-	}
+	var m = newMigrator()
 
 	m.flushdst = true
 	m.flushsrc = true

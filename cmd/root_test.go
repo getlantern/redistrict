@@ -2,20 +2,17 @@ package cmd
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 func TestConfig(t *testing.T) {
-	var m = &migrator{
-		src:         "127.0.0.1:6379",
-		dst:         "127.0.0.1:6379",
-		largeHashes: make(map[string]bool),
-		tempHashes:  make([]string, 0),
-	}
+	var m = newMigrator()
 	m.cfgFile = ""
 	m.initConfig()
 
@@ -30,42 +27,43 @@ func TestConfig(t *testing.T) {
 	*/
 }
 
+var testMigFunc = func(k string, wg *sync.WaitGroup, pool *pb.Pool) int {
+	return 1
+}
+
 func TestIntegrateConfigSettings(t *testing.T) {
 
 	keys := []string{"1", "2", "3"}
-	kmap := map[string]bool{"4": true}
+	kmap := map[string]migFunc{"4": testMigFunc}
 
 	migr := newMigrator()
-	k := migr.integrateConfigSettings(keys, kmap)
-	assert.Equal(t, 3, len(k))
-	assert.True(t, k["1"])
-	assert.True(t, k["3"])
-	assert.False(t, k["4"])
+	migr.largeKeys = kmap
+	migr.integrateConfigSettings(keys, testMigFunc)
+	assert.Equal(t, 4, len(kmap))
+	assert.NotNil(t, kmap["1"])
+	assert.NotNil(t, kmap["3"])
+	assert.Nil(t, kmap["5"])
 }
 
 func TestPopulateKeyMap(t *testing.T) {
 
 	keys := []string{"1", "2", "3"}
-	kmap := map[string]bool{}
+	kmap := map[string]migFunc{}
 
 	migr := newMigrator()
+	migr.largeKeys = kmap
 
 	migr.populateKeyMapFrom("keysName", func(arg1 string) []string {
 		return keys
-	}, kmap)
+	}, testMigFunc)
 
-	assert.True(t, kmap["1"])
-	assert.True(t, kmap["3"])
-	assert.False(t, kmap["4"])
+	assert.NotNil(t, kmap["1"])
+	assert.NotNil(t, kmap["3"])
+	assert.Nil(t, kmap["4"])
 }
 
 func TestRootMigrate(t *testing.T) {
-	var m = &migrator{
-		src:         "127.0.0.1:6379",
-		dst:         "127.0.0.1:6379",
-		largeHashes: make(map[string]bool),
-		tempHashes:  make([]string, 0),
-	}
+	var m = newMigrator()
 	m.flushdst = true
 	m.flushsrc = true
 
