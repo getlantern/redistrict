@@ -27,7 +27,7 @@ func genericMigrateWith(key string, scan gscan, set gset, gl glen,
 	if err != nil {
 		panic(fmt.Sprintf("Could not get length %v", err))
 	}
-	bar := pb.New(int(length))
+	bar := pb.New(int(length)).Prefix(key)
 	if pool != nil {
 		pool.Add(bar)
 	}
