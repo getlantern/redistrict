@@ -151,9 +151,11 @@ func (m *migrator) initRedis() {
 	if m.flushdst {
 		// Flush with a separate client because it can take ahwile on large DBs and can cause
 		// timeouts to be hit.
+		logger.Info("Flushing destination redis...")
 		flushclient := m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
 		flushclient.FlushDB()
 		flushclient.Close()
+		logger.Info("Finished flushing destination redis...")
 	}
 
 	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
