@@ -11,7 +11,7 @@ import (
 var cmdKey string
 
 type gscan func(key string, cursor uint64, match string, count int64) ([]string, uint64, error)
-type gmigrate func(key string, keyvals []string) error
+type gmigrate func(key string, keyvals []string) (addToTotal, error)
 type glen func(key string) *redis.IntCmd
 
 type keyValHandler func(key string, scan gscan, gmig gmigrate, gl glen, bar *pb.ProgressBar,
@@ -62,17 +62,27 @@ func genericRead(key string, scan gscan, ch chan []string) {
 	}
 }
 
+// addToTotal is simply a function that returns the correct number to add to the total for a
+// given pass. This is purely because hscan returns the keys and values in the response, so when
+// adding to the total keys processed we need to use half the length.
+type addToTotal func(i int) int
+
+var identity = func(i int) int { return i }
+
+var half = func(i int) int { return i }
+
 func genericWrite(key string, gmig gmigrate, ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGroup) int {
 	defer wg.Done()
 	total := 0
 	for keyvals := range ch {
-		err := gmig(key, keyvals)
+		adder, err := gmig(key, keyvals)
 		if err != nil {
 			panic(fmt.Sprintf("Error setting values on destination %v", err))
 		} else {
 			cur := len(keyvals)
-			bar.Add(cur)
-			total += cur
+			toAdd := adder(cur)
+			bar.Add(toAdd)
+			total += toAdd
 		}
 	}
 	bar.Finish()
