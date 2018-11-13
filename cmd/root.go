@@ -165,7 +165,7 @@ func (m *migrator) initRedis() {
 	}
 }
 
-func (m *migrator) newClient(addr, password string, db int, sslCert string) *redis.Client {
+func (m *migrator) newClient(addr, password string, db int, certPath string) *redis.Client {
 	options := &redis.Options{
 		Addr:         addr,
 		Password:     password,
@@ -174,8 +174,8 @@ func (m *migrator) newClient(addr, password string, db int, sslCert string) *red
 		WriteTimeout: 10 * time.Minute,
 		DialTimeout:  12 * time.Second,
 	}
-	if sslCert != "" {
-		options.TLSConfig = m.tlsConfig(sslCert)
+	if certPath != "" {
+		options.TLSConfig = m.tlsConfig(certPath)
 	}
 	return redis.NewClient(options)
 }
@@ -276,12 +276,10 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 	for keyvals := range ch {
 		ktvs := make([]ktv, 0)
 		spipeline := sclient.Pipeline()
-		//logger.Infof("Reading %v keys", len(keyvals))
 		n := len(keyvals)
 		for i := 0; i < n; i++ {
 			key := keyvals[i]
 			if _, ok := m.largeKeys[key]; ok {
-				logger.Infof("Separately migrating large key at %v", key)
 				largeKeyCount++
 				continue
 			}
@@ -315,11 +313,10 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 			panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
 		}
 		bar.Add(n)
-		//bar.Add(n)
 	}
 	bar.Finish()
 	wg.Done()
-	logger.Infof("Waiting on %v large hashes to complete transferring", largeKeyCount)
+	//logger.Infof("Waiting on %v large hashes to complete transferring", largeKeyCount)
 	wg.Wait()
 }
 

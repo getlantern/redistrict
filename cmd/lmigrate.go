@@ -66,13 +66,11 @@ func (lm *lmigrator) lscan(key string, cursor uint64, match string, count int64)
 	return keyvals, newCursor, err
 }
 
-func (lm *lmigrator) migrateKeyVals(key string, keyvals []string) resultable {
-	return func() error {
-		if len(keyvals) == 0 {
-			return nil
-		}
-		cmd := dclient.LPush(key, keyvals)
-		_, err := cmd.Result()
-		return err
+func (lm *lmigrator) migrateKeyVals(key string, keyvals []string) error {
+	if len(keyvals) == 0 {
+		return nil
 	}
+	cmd := dclient.LPush(key, keyvals)
+	_, err := cmd.Result()
+	return err
 }

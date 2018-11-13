@@ -52,13 +52,11 @@ func (sm *smigrator) sscan(key string, cursor uint64, match string, count int64)
 	return sclient.SScan(key, cursor, match, count).Result()
 }
 
-func (sm *smigrator) migrateKeyVals(key string, keyvals []string) resultable {
-	return func() error {
-		if len(keyvals) == 0 {
-			return nil
-		}
-		cmd := dclient.SAdd(key, keyvals)
-		_, err := cmd.Result()
-		return err
+func (sm *smigrator) migrateKeyVals(key string, keyvals []string) error {
+	if len(keyvals) == 0 {
+		return nil
 	}
+	cmd := dclient.SAdd(key, keyvals)
+	_, err := cmd.Result()
+	return err
 }

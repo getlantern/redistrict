@@ -11,15 +11,13 @@ import (
 var cmdKey string
 
 type gscan func(key string, cursor uint64, match string, count int64) ([]string, uint64, error)
-type gset func(key string, keyvals []string) resultable
+type gmigrate func(key string, keyvals []string) error
 type glen func(key string) *redis.IntCmd
 
-type resultable func() error
-
-type keyValHandler func(key string, scan gscan, set gset, gl glen, bar *pb.ProgressBar,
+type keyValHandler func(key string, scan gscan, gmig gmigrate, gl glen, bar *pb.ProgressBar,
 	wg *sync.WaitGroup) int
 
-func genericMigrateWith(key string, scan gscan, set gset, gl glen,
+func genericMigrateWith(key string, scan gscan, gmig gmigrate, gl glen,
 	wg *sync.WaitGroup, pool *pb.Pool) int {
 	wg.Add(1)
 
@@ -35,7 +33,7 @@ func genericMigrateWith(key string, scan gscan, set gset, gl glen,
 	ch := make(chan []string)
 
 	go genericRead(key, scan, ch)
-	return genericWrite(key, set, ch, bar, wg)
+	return genericWrite(key, gmig, ch, bar, wg)
 }
 
 // Generic read func that migrates things that can use variations on SCAN,
@@ -43,7 +41,6 @@ func genericMigrateWith(key string, scan gscan, set gset, gl glen,
 func genericRead(key string, scan gscan, ch chan []string) {
 	var cursor uint64
 	var n int64
-	//for i := 0; i < 10; i++ {
 	for {
 		var keyvals []string
 		var err error
@@ -65,11 +62,11 @@ func genericRead(key string, scan gscan, ch chan []string) {
 	}
 }
 
-func genericWrite(key string, set gset, ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGroup) int {
+func genericWrite(key string, gmig gmigrate, ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGroup) int {
 	defer wg.Done()
 	total := 0
 	for keyvals := range ch {
-		err := set(key, keyvals)()
+		err := gmig(key, keyvals)
 		if err != nil {
 			panic(fmt.Sprintf("Error setting values on destination %v", err))
 		} else {

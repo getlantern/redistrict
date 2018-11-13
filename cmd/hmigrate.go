@@ -52,15 +52,13 @@ func (hm *hmigrator) hscan(key string, cursor uint64, match string, count int64)
 	return sclient.HScan(key, cursor, match, count).Result()
 }
 
-func (hm *hmigrator) migrateKeyVals(key string, keyvals []string) resultable {
-	return func() error {
-		if len(keyvals) == 0 {
-			return nil
-		}
-		cmd := dclient.HMSet(key, hm.keyvalsToMap(keyvals))
-		_, err := cmd.Result()
-		return err
+func (hm *hmigrator) migrateKeyVals(key string, keyvals []string) error {
+	if len(keyvals) == 0 {
+		return nil
 	}
+	cmd := dclient.HMSet(key, hm.keyvalsToMap(keyvals))
+	_, err := cmd.Result()
+	return err
 }
 
 func (hm *hmigrator) keyvalsToMap(keyvals []string) map[string]interface{} {
