@@ -80,7 +80,7 @@ func genericWrite(key string, gmig gmigrate, ch chan []string, bar *pb.ProgressB
 	for keyvals := range ch {
 		adder, err := gmig(key, keyvals)
 		if err != nil {
-			panic(fmt.Sprintf("Error setting values on destination %v", err))
+			panic(fmt.Sprintf("Error setting values on destination for key %v: %v", key, err))
 		} else {
 			cur := len(keyvals)
 			toAdd := adder(cur)
