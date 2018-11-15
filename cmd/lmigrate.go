@@ -45,7 +45,7 @@ func lmigrateKey(k string, wg *sync.WaitGroup, pool *pb.Pool) int {
 
 func (lm *lmigrator) migrate(wg *sync.WaitGroup, pool *pb.Pool) int {
 	return genericMigrateWith(lm.key, lm.lscan, lm.migrateKeyVals,
-		sclient.LLen, wg, pool)
+		sclient.LLen, wg, pool, lcount)
 }
 
 func (lm *lmigrator) lscan(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {
@@ -63,7 +63,7 @@ func (lm *lmigrator) lscan(key string, cursor uint64, match string, count int64)
 	if len(keyvals) == 0 {
 		return keyvals, 0, err
 	}
-	return keyvals, newCursor, err
+	return keyvals, newCursor + 1, err
 }
 
 func (lm *lmigrator) migrateKeyVals(key string, keyvals []string) (addToTotal, error) {

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 
@@ -23,7 +22,7 @@ func TestLMigrate(t *testing.T) {
 	m.initRedis()
 
 	testkey := "list1"
-	testLength := 1000
+	testLength := 40
 	for i := 0; i < testLength; i++ {
 		err := sclient.LPush(testkey, fmt.Sprintf("value-%d", i)).Err()
 		if err != nil {
@@ -33,6 +32,8 @@ func TestLMigrate(t *testing.T) {
 	cmdKey = testkey
 	var wg sync.WaitGroup
 	var lm = &lmigrator{key: cmdKey}
+	lcount = 7
+
 	lm.migrate(&wg, nil)
 
 	logger.Debugf("Migrated test list...%v", dclient.LLen(testkey).Val())
@@ -45,7 +46,8 @@ func TestLMigrate(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		assert.True(t, strings.HasPrefix(val, "value-"))
+
+		assert.Equal(t, fmt.Sprintf("value-%d", i), val)
 	}
 
 	assert.Equal(t, int64(0), dclient.LLen(testkey).Val())

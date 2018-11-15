@@ -45,7 +45,7 @@ func smigrateKey(k string, wg *sync.WaitGroup, pool *pb.Pool) int {
 
 func (sm *smigrator) migrate(wg *sync.WaitGroup, pool *pb.Pool) int {
 	return genericMigrateWith(sm.key, sm.sscan, sm.migrateKeyVals,
-		sclient.SCard, wg, pool)
+		sclient.SCard, wg, pool, scount)
 }
 
 func (sm *smigrator) sscan(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {

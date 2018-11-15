@@ -18,7 +18,7 @@ type keyValHandler func(key string, scan gscan, gmig gmigrate, gl glen, bar *pb.
 	wg *sync.WaitGroup) int
 
 func genericMigrateWith(key string, scan gscan, gmig gmigrate, gl glen,
-	wg *sync.WaitGroup, pool *pb.Pool) int {
+	wg *sync.WaitGroup, pool *pb.Pool, count int) int {
 	wg.Add(1)
 
 	length, err := gl(key).Result()
@@ -28,23 +28,26 @@ func genericMigrateWith(key string, scan gscan, gmig gmigrate, gl glen,
 	bar := pb.New(int(length)).Prefix(key)
 	if pool != nil {
 		pool.Add(bar)
+	} else {
+		bar.ShowTimeLeft = true
+		bar.Start()
 	}
 
 	ch := make(chan []string)
 
-	go genericRead(key, scan, ch)
+	go genericRead(key, scan, ch, count)
 	return genericWrite(key, gmig, ch, bar, wg)
 }
 
 // Generic read func that migrates things that can use variations on SCAN,
 // such as hashes and sets (HSCAN and SSCAN).
-func genericRead(key string, scan gscan, ch chan []string) {
+func genericRead(key string, scan gscan, ch chan []string, count int) {
 	var cursor uint64
 	var n int64
 	for {
 		var keyvals []string
 		var err error
-		keyvals, cursor, err = scan(key, cursor, "", int64(hcount))
+		keyvals, cursor, err = scan(key, cursor, "", int64(count))
 		if err != nil {
 			panic(err)
 		}
@@ -69,7 +72,7 @@ type addToTotal func(i int) int
 
 var identity = func(i int) int { return i }
 
-var half = func(i int) int { return i }
+var half = func(i int) int { return i / 2 }
 
 func genericWrite(key string, gmig gmigrate, ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGroup) int {
 	defer wg.Done()

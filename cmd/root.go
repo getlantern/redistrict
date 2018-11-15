@@ -30,8 +30,11 @@ type migrator struct {
 	srcauth string
 	dstauth string
 
-	sslsrcCert string
-	ssldstCert string
+	tlssrcCert string
+	tlsdstCert string
+
+	tlssrc bool
+	tlsdst bool
 
 	srcdb int
 	dstdb int
@@ -115,8 +118,10 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVarP(&mig.srcauth, "srcauth", "", "", "Source redis password")
 	rootCmd.PersistentFlags().StringVarP(&mig.dstauth, "dstauth", "", "", "Destination redis password")
-	rootCmd.PersistentFlags().StringVarP(&mig.sslsrcCert, "sslsrcCert", "", "", "SSL certificate path for source redis, if any.")
-	rootCmd.PersistentFlags().StringVarP(&mig.ssldstCert, "ssldstCert", "", "", "SSL certificate path for destination redis, if any.")
+	rootCmd.PersistentFlags().StringVarP(&mig.tlssrcCert, "tlssrcCert", "", "", "TLS certificate path for source redis, if any. Implies tlssrc.")
+	rootCmd.PersistentFlags().StringVarP(&mig.tlsdstCert, "tlsdstCert", "", "", "TLS certificate path for destination redis, if any. Implies tlsdst.")
+	rootCmd.PersistentFlags().BoolVarP(&mig.tlssrc, "tlssrc", "", false, "Use TLS to access the source.")
+	rootCmd.PersistentFlags().BoolVarP(&mig.tlsdst, "tlsdst", "", false, "Use TLS to access the destination.")
 	rootCmd.PersistentFlags().IntVarP(&mig.srcdb, "srcdb", "", 0, "Redis db number, defaults to 0")
 	rootCmd.PersistentFlags().IntVarP(&mig.dstdb, "dstdb", "", 0, "Redis db number, defaults to 0")
 
@@ -152,14 +157,14 @@ func (m *migrator) initRedis() {
 		// Flush with a separate client because it can take ahwile on large DBs and can cause
 		// timeouts to be hit.
 		logger.Info("Flushing destination redis...")
-		flushclient := m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
+		flushclient := m.newClient(m.dst, m.dstauth, m.dstdb, m.tlsdstCert, m.tlsdst)
 		flushclient.FlushDB()
 		flushclient.Close()
 		logger.Info("Finished flushing destination redis...")
 	}
 
-	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.ssldstCert)
-	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.sslsrcCert)
+	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.tlsdstCert, m.tlsdst)
+	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.tlssrcCert, m.tlssrc)
 
 	// Note this is only exposed for tests to avoid letting the caller do something stupid...
 	if m.flushsrc {
@@ -167,7 +172,7 @@ func (m *migrator) initRedis() {
 	}
 }
 
-func (m *migrator) newClient(addr, password string, db int, certPath string) *redis.Client {
+func (m *migrator) newClient(addr, password string, db int, certPath string, useTLS bool) *redis.Client {
 	options := &redis.Options{
 		Addr:         addr,
 		Password:     password,
@@ -178,22 +183,32 @@ func (m *migrator) newClient(addr, password string, db int, certPath string) *re
 	}
 	if certPath != "" {
 		options.TLSConfig = m.tlsConfig(certPath)
+	} else if useTLS {
+		options.TLSConfig = m.defaultTLSConfig()
 	}
 	return redis.NewClient(options)
 }
 
+func (m *migrator) defaultTLSConfig() *tls.Config {
+	return &tls.Config{}
+}
+
 func (m *migrator) tlsConfig(certPath string) *tls.Config {
-	cert, err := ioutil.ReadFile(certPath)
-	if err != nil {
-		log.Fatal(err)
+
+	cfg := &tls.Config{}
+
+	if certPath != "" {
+		caCert, err := ioutil.ReadFile(certPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		srcCertPool := x509.NewCertPool()
+		srcCertPool.AppendCertsFromPEM(caCert)
+		cfg.RootCAs = srcCertPool
 	}
 
-	srcCertPool := x509.NewCertPool()
-	srcCertPool.AppendCertsFromPEM(cert)
-
-	return &tls.Config{
-		RootCAs: srcCertPool,
-	}
+	return cfg
 }
 
 type scan func(cursor uint64, match string, count int64) *redis.ScanCmd
