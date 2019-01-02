@@ -184,13 +184,14 @@ func (m *migrator) newClient(addr, password string, db int, certPath string, use
 	if certPath != "" {
 		options.TLSConfig = m.tlsConfig(certPath)
 	} else if useTLS {
-		options.TLSConfig = m.defaultTLSConfig()
+		options.TLSConfig = &tls.Config{}
 	}
-	return redis.NewClient(options)
-}
+	client := redis.NewClient(options)
 
-func (m *migrator) defaultTLSConfig() *tls.Config {
-	return &tls.Config{}
+	if err := client.Ping().Err(); err != nil {
+		panic(fmt.Sprintf("Could not get pingable redis client: %v", err))
+	}
+	return client
 }
 
 func (m *migrator) tlsConfig(certPath string) *tls.Config {
