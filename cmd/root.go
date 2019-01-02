@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -182,7 +183,7 @@ func (m *migrator) newClient(addr, password string, db int, certPath string, use
 		DialTimeout:  12 * time.Second,
 	}
 	if certPath != "" {
-		options.TLSConfig = m.tlsConfig(certPath)
+		options.TLSConfig = m.tlsConfig(certPath, addr)
 	} else if useTLS {
 		options.TLSConfig = &tls.Config{}
 	}
@@ -194,7 +195,7 @@ func (m *migrator) newClient(addr, password string, db int, certPath string, use
 	return client
 }
 
-func (m *migrator) tlsConfig(certPath string) *tls.Config {
+func (m *migrator) tlsConfig(certPath, addr string) *tls.Config {
 
 	cfg := &tls.Config{}
 
@@ -207,6 +208,12 @@ func (m *migrator) tlsConfig(certPath string) *tls.Config {
 		srcCertPool := x509.NewCertPool()
 		srcCertPool.AppendCertsFromPEM(caCert)
 		cfg.RootCAs = srcCertPool
+
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			log.Fatalf("Unable to determine hostname for server: %v", err)
+		}
+		cfg.ServerName = host
 	}
 
 	return cfg
