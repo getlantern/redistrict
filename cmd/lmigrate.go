@@ -70,7 +70,7 @@ func (lm *lmigrator) migrateKeyVals(key string, keyvals []string) (addToTotal, e
 	if len(keyvals) == 0 {
 		return identity, nil
 	}
-	cmd := dclient.LPush(key, keyvals)
+	cmd := dclient.RPush(key, keyvals)
 	_, err := cmd.Result()
 	return identity, err
 }

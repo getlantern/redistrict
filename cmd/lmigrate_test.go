@@ -24,7 +24,7 @@ func TestLMigrate(t *testing.T) {
 	testkey := "list1"
 	testLength := 40
 	for i := 0; i < testLength; i++ {
-		err := sclient.LPush(testkey, fmt.Sprintf("value-%d", i)).Err()
+		err := sclient.RPush(testkey, fmt.Sprintf("value-%d", i)).Err()
 		if err != nil {
 			panic(err)
 		}
@@ -39,9 +39,9 @@ func TestLMigrate(t *testing.T) {
 	logger.Debugf("Migrated test list...%v", dclient.LLen(testkey).Val())
 
 	assert.Equal(t, int64(testLength), dclient.LLen(testkey).Val())
-	logger.Debug("Popping all values...")
+	logger.Debug("Indexing through all values...")
 	for i := 0; i < testLength; i++ {
-		get := dclient.LPop(testkey)
+		get := dclient.LIndex(testkey, int64(i))
 		val, err := get.Result()
 		if err != nil {
 			panic(err)
@@ -49,8 +49,6 @@ func TestLMigrate(t *testing.T) {
 
 		assert.Equal(t, fmt.Sprintf("value-%d", i), val)
 	}
-
-	assert.Equal(t, int64(0), dclient.LLen(testkey).Val())
 
 	sclient.FlushAll()
 	dclient.FlushAll()
