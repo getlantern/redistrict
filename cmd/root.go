@@ -224,12 +224,11 @@ type scan func(cursor uint64, match string, count int64) *redis.ScanCmd
 type klen func() *redis.IntCmd
 
 func (m *migrator) migrate(cmd *cobra.Command, args []string) {
-
 	m.integrateConfigSettings(m.tempHashes, hmigrateKey)
 	m.integrateConfigSettings(m.tempSets, smigrateKey)
 	m.integrateConfigSettings(m.tempLists, lmigrateKey)
 
-	m.migrateWith(sclient.Scan, sclient.DBSize)
+	m.migrateKeys()
 }
 
 func (m *migrator) integrateConfigSettings(keys []string, mFunc migFunc) {
@@ -238,12 +237,12 @@ func (m *migrator) integrateConfigSettings(keys []string, mFunc migFunc) {
 	}
 }
 
-func (m *migrator) migrateWith(sc scan, kl klen) {
+func (m *migrator) migrateKeys() {
 	if m.writingToSelf() {
 		fmt.Println("Source and destination databases cannot be the same. Consider using a different database ID.")
 		return
 	}
-	length, err := kl().Result()
+	length, err := sclient.DBSize().Result()
 	if err != nil {
 		panic(fmt.Sprintf("Error getting source database size: %v", err))
 	}
@@ -264,30 +263,10 @@ func (m *migrator) migrateWith(sc scan, kl klen) {
 
 	ch := make(chan []string)
 
-	go m.read(sc, ch)
+	go genericRead("", func(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {
+		return sclient.Scan(cursor, "", count).Result()
+	}, ch, m.count)
 	m.write(ch, bar, &wg)
-}
-
-func (m *migrator) read(sc scan, ch chan []string) {
-	var cursor uint64
-	var n int64
-	for {
-		var keyvals []string
-		var err error
-		keyvals, cursor, err = sc(cursor, "", int64(m.count)).Result()
-		if err != nil {
-			panic(fmt.Sprintf("Error scanning source: %v", err))
-		}
-		cur := len(keyvals)
-		n += int64(cur)
-
-		ch <- keyvals
-
-		if cursor == 0 {
-			close(ch)
-			break
-		}
-	}
 }
 
 func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGroup) {

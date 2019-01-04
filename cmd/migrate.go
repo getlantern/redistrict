@@ -49,7 +49,7 @@ func genericRead(key string, scan gscan, ch chan []string, count int) {
 		var err error
 		keyvals, cursor, err = scan(key, cursor, "", int64(count))
 		if err != nil {
-			panic(err)
+			panic(fmt.Sprintf("Error scanning source: %v", err))
 		}
 		cur := len(keyvals)
 		n += int64(cur)
