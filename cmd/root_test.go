@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
-	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 func TestConfig(t *testing.T) {
@@ -27,7 +26,7 @@ func TestConfig(t *testing.T) {
 	*/
 }
 
-var testMigFunc = func(k string, wg *sync.WaitGroup, pool *pb.Pool) int {
+var testMigFunc = func(k string, wg *sync.WaitGroup, pf poolFunc) int {
 	return 1
 }
 

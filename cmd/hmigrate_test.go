@@ -32,7 +32,7 @@ func TestHMigrate(t *testing.T) {
 	cmdKey = testkey
 	var wg sync.WaitGroup
 	var hm = &hmigrator{key: cmdKey}
-	hm.migrate(&wg, nil)
+	hm.migrate(&wg, dummyProgressPool)
 
 	for i := 0; i < 10000; i++ {
 		//logger.Debugf("dclient %v", dclient)

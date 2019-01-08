@@ -18,7 +18,7 @@ type keyValHandler func(key string, scan gscan, gmig gmigrate, gl glen, bar *pb.
 	wg *sync.WaitGroup) int
 
 func genericMigrateWith(key string, scan gscan, gmig gmigrate, gl glen,
-	wg *sync.WaitGroup, pool *pb.Pool, count int) int {
+	wg *sync.WaitGroup, pf poolFunc, count int) int {
 	wg.Add(1)
 
 	length, err := gl(key).Result()
@@ -26,9 +26,7 @@ func genericMigrateWith(key string, scan gscan, gmig gmigrate, gl glen,
 		panic(fmt.Sprintf("Could not get length %v", err))
 	}
 	bar := pb.New(int(length)).Prefix(key)
-	if pool != nil {
-		pool.Add(bar)
-	} else {
+	if !pf(bar) {
 		bar.ShowTimeLeft = true
 		bar.Start()
 	}

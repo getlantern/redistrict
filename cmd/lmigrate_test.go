@@ -34,7 +34,7 @@ func TestLMigrate(t *testing.T) {
 	var lm = &lmigrator{key: cmdKey}
 	lcount = 7
 
-	lm.migrate(&wg, nil)
+	lm.migrate(&wg, dummyProgressPool)
 
 	logger.Debugf("Migrated test list...%v", dclient.LLen(testkey).Val())
 

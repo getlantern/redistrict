@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"github.com/spf13/cobra"
-	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 type hmigrator struct {
@@ -35,17 +34,17 @@ func hmigrate(cmd *cobra.Command, args []string) {
 	// a part of a larger migration.
 	var wg sync.WaitGroup
 	var hm = &hmigrator{key: cmdKey}
-	hm.migrate(&wg, nil)
+	hm.migrate(&wg, dummyProgressPool)
 }
 
-func hmigrateKey(k string, wg *sync.WaitGroup, pool *pb.Pool) int {
+func hmigrateKey(k string, wg *sync.WaitGroup, pf poolFunc) int {
 	var hm = &hmigrator{key: k}
-	return hm.migrate(wg, pool)
+	return hm.migrate(wg, pf)
 }
 
-func (hm *hmigrator) migrate(wg *sync.WaitGroup, pool *pb.Pool) int {
+func (hm *hmigrator) migrate(wg *sync.WaitGroup, pf poolFunc) int {
 	return genericMigrateWith(hm.key, hm.hscan, hm.migrateKeyVals,
-		sclient.HLen, wg, pool, hcount)
+		sclient.HLen, wg, pf, hcount)
 }
 
 func (hm *hmigrator) hscan(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {

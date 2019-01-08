@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"github.com/spf13/cobra"
-	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 type smigrator struct {
@@ -35,17 +34,17 @@ func smigrate(cmd *cobra.Command, args []string) {
 	// a part of a larger migration.
 	var wg sync.WaitGroup
 	var sm = &smigrator{key: cmdKey}
-	sm.migrate(&wg, nil)
+	sm.migrate(&wg, dummyProgressPool)
 }
 
-func smigrateKey(k string, wg *sync.WaitGroup, pool *pb.Pool) int {
+func smigrateKey(k string, wg *sync.WaitGroup, pf poolFunc) int {
 	var sm = &smigrator{key: k}
-	return sm.migrate(wg, pool)
+	return sm.migrate(wg, pf)
 }
 
-func (sm *smigrator) migrate(wg *sync.WaitGroup, pool *pb.Pool) int {
+func (sm *smigrator) migrate(wg *sync.WaitGroup, pf poolFunc) int {
 	return genericMigrateWith(sm.key, sm.sscan, sm.migrateKeyVals,
-		sclient.SCard, wg, pool, scount)
+		sclient.SCard, wg, pf, scount)
 }
 
 func (sm *smigrator) sscan(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {

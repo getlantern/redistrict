@@ -50,6 +50,9 @@ type migrator struct {
 	tempSets []string
 
 	count int
+
+	// Skip showing progress bars if true.
+	noProgress bool
 }
 
 var largeKeys = make(map[string]migFunc)
@@ -125,6 +128,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&mig.tlsdst, "tlsdst", "", false, "Use TLS to access the destination.")
 	rootCmd.PersistentFlags().IntVarP(&mig.srcdb, "srcdb", "", 0, "Redis db number, defaults to 0")
 	rootCmd.PersistentFlags().IntVarP(&mig.dstdb, "dstdb", "", 0, "Redis db number, defaults to 0")
+	rootCmd.PersistentFlags().BoolVarP(&mig.noProgress, "noprogress", "", false, "Do not display progress bars.")
 
 	rootCmd.PersistentFlags().BoolVarP(&mig.flushdst, "flushdst", "", false, "Flush the destination db before doing anything")
 	rootCmd.Flags().IntVarP(&mig.count, "count", "", 5000, "The number of keys to scan on each pass")
@@ -138,6 +142,7 @@ func newMigrator() *migrator {
 		tempHashes: make([]string, 0),
 		tempLists:  make([]string, 0),
 		tempSets:   make([]string, 0),
+		noProgress: false,
 	}
 }
 
@@ -236,6 +241,20 @@ func (m *migrator) integrateConfigSettings(keys []string, mFunc migFunc) {
 	}
 }
 
+type progress interface {
+	Finish()
+	Add(int) int
+}
+
+type poolFunc func(...*pb.ProgressBar) bool
+
+type dummyProg struct{}
+
+func (d *dummyProg) Finish()     {}
+func (d *dummyProg) Add(int) int { return 0 }
+
+var dummyProgressPool = func(...*pb.ProgressBar) bool { return false }
+
 func (m *migrator) migrateKeys() {
 	if m.writingToSelf() {
 		fmt.Println("Source and destination databases cannot be the same. Consider using a different database ID.")
@@ -248,15 +267,27 @@ func (m *migrator) migrateKeys() {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	bar := pb.New(int(length)).Prefix("KEYS *")
+	var bar progress
+	var pf poolFunc
+	if !m.noProgress {
+		bar = &dummyProg{}
+		pf = dummyProgressPool
+	} else {
+		realProgress := pb.New(int(length)).Prefix("KEYS *")
+		pool, err := pb.StartPool(realProgress)
+		if err != nil {
+			panic(err)
+		}
+		bar = realProgress
+		pf = func(pbs ...*pb.ProgressBar) bool {
+			pool.Add(pbs...)
+			return true
+		}
 
-	pool, err := pb.StartPool(bar)
-	if err != nil {
-		panic(err)
 	}
 
 	for k, migrateFunc := range largeKeys {
-		go migrateFunc(k, &wg, pool)
+		go migrateFunc(k, &wg, pf)
 	}
 
 	ch := make(chan []string)
@@ -267,7 +298,7 @@ func (m *migrator) migrateKeys() {
 	m.write(ch, bar, &wg)
 }
 
-func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGroup) {
+func (m *migrator) write(ch chan []string, bar progress, wg *sync.WaitGroup) {
 	type ktv struct {
 		key      string
 		ttlCmd   *redis.DurationCmd
@@ -313,11 +344,9 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 			dpipeline.Restore(ktv.key, ttl, value)
 		}
 
-		/*
-			if _, err := dpipeline.Exec(); err != nil {
-				panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
-			}
-		*/
+		if _, err := dpipeline.Exec(); err != nil {
+			panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
+		}
 		bar.Add(n)
 	}
 	bar.Finish()
@@ -354,7 +383,7 @@ func (m *migrator) initConfig() {
 	}
 }
 
-type migFunc func(string, *sync.WaitGroup, *pb.Pool) int
+type migFunc func(string, *sync.WaitGroup, poolFunc) int
 
 func (m *migrator) populateKeyMap(keysName string, mFunc migFunc) {
 	m.populateKeyMapFrom(keysName, viper.GetStringSlice, mFunc)
