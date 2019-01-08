@@ -37,7 +37,7 @@ func TestIntegrateConfigSettings(t *testing.T) {
 	kmap := map[string]migFunc{"4": testMigFunc}
 
 	migr := newMigrator()
-	migr.largeKeys = kmap
+	largeKeys = kmap
 	migr.integrateConfigSettings(keys, testMigFunc)
 	assert.Equal(t, 4, len(kmap))
 	assert.NotNil(t, kmap["1"])
@@ -51,7 +51,7 @@ func TestPopulateKeyMap(t *testing.T) {
 	kmap := map[string]migFunc{}
 
 	migr := newMigrator()
-	migr.largeKeys = kmap
+	largeKeys = kmap
 
 	migr.populateKeyMapFrom("keysName", func(arg1 string) []string {
 		return keys

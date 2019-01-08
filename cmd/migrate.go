@@ -42,11 +42,19 @@ func genericMigrateWith(key string, scan gscan, gmig gmigrate, gl glen,
 // Generic read func that migrates things that can use variations on SCAN,
 // such as hashes and sets (HSCAN and SSCAN).
 func genericRead(key string, scan gscan, ch chan []string, count int) {
+	genericReadWithClose(key, scan, ch, count, true)
+}
+
+// genericReadWithClose is a func that migrates things that can use variations on SCAN,
+// such as hashes and sets (HSCAN and SSCAN) with optional channel closing
+func genericReadWithClose(key string, scan gscan, ch chan []string, count int, shouldClose bool) {
 	var cursor uint64
 	var n int64
 	for {
 		var keyvals []string
 		var err error
+
+		// Note we don't use a pipeline here, as for large scans the savings are negligible.
 		keyvals, cursor, err = scan(key, cursor, "", int64(count))
 		if err != nil {
 			panic(fmt.Sprintf("Error scanning source: %v", err))
@@ -59,7 +67,9 @@ func genericRead(key string, scan gscan, ch chan []string, count int) {
 		}
 
 		if cursor == 0 {
-			close(ch)
+			if shouldClose {
+				close(ch)
+			}
 			break
 		}
 	}

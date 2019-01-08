@@ -43,8 +43,6 @@ type migrator struct {
 	flushdst bool
 	flushsrc bool
 
-	largeKeys map[string]migFunc
-
 	tempHashes []string
 
 	tempLists []string
@@ -53,6 +51,8 @@ type migrator struct {
 
 	count int
 }
+
+var largeKeys = make(map[string]migFunc)
 
 var mig = newMigrator()
 
@@ -135,7 +135,6 @@ func newMigrator() *migrator {
 	return &migrator{
 		src:        "127.0.0.1:6379",
 		dst:        "127.0.0.1:6379",
-		largeKeys:  make(map[string]migFunc),
 		tempHashes: make([]string, 0),
 		tempLists:  make([]string, 0),
 		tempSets:   make([]string, 0),
@@ -233,7 +232,7 @@ func (m *migrator) migrate(cmd *cobra.Command, args []string) {
 
 func (m *migrator) integrateConfigSettings(keys []string, mFunc migFunc) {
 	for _, set := range keys {
-		m.largeKeys[set] = mFunc
+		largeKeys[set] = mFunc
 	}
 }
 
@@ -257,7 +256,7 @@ func (m *migrator) migrateKeys() {
 		panic(err)
 	}
 
-	for k, migrateFunc := range m.largeKeys {
+	for k, migrateFunc := range largeKeys {
 		go migrateFunc(k, &wg, pool)
 	}
 
@@ -283,7 +282,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 		n := len(keyvals)
 		for i := 0; i < n; i++ {
 			key := keyvals[i]
-			if _, ok := m.largeKeys[key]; ok {
+			if _, ok := largeKeys[key]; ok {
 				largeKeyCount++
 				continue
 			}
@@ -362,6 +361,6 @@ func (m *migrator) populateKeyMapFrom(keysName string, sliceFunc func(string) []
 	mFunc migFunc) {
 	keys := sliceFunc(keysName)
 	for _, k := range keys {
-		m.largeKeys[k] = mFunc
+		largeKeys[k] = mFunc
 	}
 }
