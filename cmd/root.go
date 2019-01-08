@@ -305,6 +305,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 			if ttl < 0 {
 				ttl = 0
 			}
+			ttl = 0
 			value, err := ktv.valueCmd.Result()
 			if err != nil {
 				panic(fmt.Sprintf("Error reading value for key %v: %v", ktv.key, err))
