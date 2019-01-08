@@ -55,6 +55,9 @@ type migrator struct {
 	noProgress bool
 }
 
+// Do not actually transfer the data.
+var dryRun bool
+
 var largeKeys = make(map[string]migFunc)
 
 var mig = newMigrator()
@@ -129,6 +132,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVarP(&mig.srcdb, "srcdb", "", 0, "Redis db number, defaults to 0")
 	rootCmd.PersistentFlags().IntVarP(&mig.dstdb, "dstdb", "", 0, "Redis db number, defaults to 0")
 	rootCmd.PersistentFlags().BoolVarP(&mig.noProgress, "noprogress", "", false, "Do not display progress bars.")
+	rootCmd.PersistentFlags().BoolVarP(&dryRun, "dryrun", "", false, "Do not actually perform the transfer.")
 
 	rootCmd.PersistentFlags().BoolVarP(&mig.flushdst, "flushdst", "", false, "Flush the destination db before doing anything")
 	rootCmd.Flags().IntVarP(&mig.count, "count", "", 5000, "The number of keys to scan on each pass")
@@ -343,9 +347,10 @@ func (m *migrator) write(ch chan []string, bar progress, wg *sync.WaitGroup) {
 			}
 			dpipeline.Restore(ktv.key, ttl, value)
 		}
-
-		if _, err := dpipeline.Exec(); err != nil {
-			panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
+		if !dryRun {
+			if _, err := dpipeline.Exec(); err != nil {
+				panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
+			}
 		}
 		bar.Add(n)
 	}

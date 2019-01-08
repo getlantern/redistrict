@@ -52,7 +52,7 @@ func (hm *hmigrator) hscan(key string, cursor uint64, match string, count int64)
 }
 
 func (hm *hmigrator) migrateKeyVals(key string, keyvals []string) (addToTotal, error) {
-	if len(keyvals) == 0 {
+	if len(keyvals) == 0 || dryRun {
 		return half, nil
 	}
 	cmd := dclient.HMSet(key, hm.keyvalsToMap(keyvals))

@@ -66,7 +66,7 @@ func (lm *lmigrator) lscan(key string, cursor uint64, match string, count int64)
 }
 
 func (lm *lmigrator) migrateKeyVals(key string, keyvals []string) (addToTotal, error) {
-	if len(keyvals) == 0 {
+	if len(keyvals) == 0 || dryRun {
 		return identity, nil
 	}
 	cmd := dclient.RPush(key, keyvals)
