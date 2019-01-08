@@ -129,6 +129,7 @@ func (d *differ) diffOnChan(ch chan []string, chanKeys, otherKeys *sync.Map,
 				} else {
 					chanKeys.Store(key, "")
 				}
+				bar.Increment()
 			}
 		}
 	}
