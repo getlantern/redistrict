@@ -25,11 +25,8 @@ func genericMigrateWith(key string, scan gscan, gmig gmigrate, gl glen,
 	if err != nil {
 		panic(fmt.Sprintf("Could not get length %v", err))
 	}
-	bar := pb.New(int(length)).Prefix(key)
-	if !pf(bar) {
-		bar.ShowTimeLeft = true
-		bar.Start()
-	}
+
+	bar := pf(int(length), key)
 
 	ch := make(chan []string)
 
@@ -82,7 +79,7 @@ var identity = func(i int) int { return i }
 
 var half = func(i int) int { return i / 2 }
 
-func genericWrite(key string, gmig gmigrate, ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGroup) int {
+func genericWrite(key string, gmig gmigrate, ch chan []string, bar progress, wg *sync.WaitGroup) int {
 	defer wg.Done()
 	total := 0
 	for keyvals := range ch {

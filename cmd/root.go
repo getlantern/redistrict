@@ -250,14 +250,14 @@ type progress interface {
 	Add(int) int
 }
 
-type poolFunc func(...*pb.ProgressBar) bool
+type poolFunc func(length int, key string) progress
 
 type dummyProg struct{}
 
 func (d *dummyProg) Finish()     {}
 func (d *dummyProg) Add(int) int { return 0 }
 
-var dummyProgressPool = func(...*pb.ProgressBar) bool { return false }
+var dummyProgressPool = func(length int, key string) progress { return &dummyProg{} }
 
 func (m *migrator) migrateKeys() {
 	if m.writingToSelf() {
@@ -283,9 +283,12 @@ func (m *migrator) migrateKeys() {
 			panic(err)
 		}
 		bar = realProgress
-		pf = func(pbs ...*pb.ProgressBar) bool {
-			pool.Add(pbs...)
-			return true
+		pf = func(length int, key string) progress {
+			newBar := pb.New(length).Prefix(key)
+			newBar.ShowTimeLeft = true
+			newBar.Start()
+			pool.Add(newBar)
+			return newBar
 		}
 
 	}
