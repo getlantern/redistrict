@@ -313,9 +313,11 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 			dpipeline.Restore(ktv.key, ttl, value)
 		}
 
-		if _, err := dpipeline.Exec(); err != nil {
-			panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
-		}
+		/*
+			if _, err := dpipeline.Exec(); err != nil {
+				panic(fmt.Sprintf("Error execing destination pipeline: %v", err))
+			}
+		*/
 		bar.Add(n)
 	}
 	bar.Finish()
