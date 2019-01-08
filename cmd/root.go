@@ -273,7 +273,7 @@ func (m *migrator) migrateKeys() {
 	wg.Add(1)
 	var bar progress
 	var pf poolFunc
-	if !m.noProgress {
+	if m.noProgress {
 		bar = &dummyProg{}
 		pf = dummyProgressPool
 	} else {
