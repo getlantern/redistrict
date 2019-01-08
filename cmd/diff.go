@@ -14,8 +14,8 @@ const compareCount = 4000
 
 type differ struct {
 	key      string
-	allKeys1 map[string]bool
-	allKeys2 map[string]bool
+	allKeys1 *sync.Map
+	allKeys2 *sync.Map
 }
 
 // diffCmd is for comparing two redis databases.
@@ -38,8 +38,8 @@ func newDiffer() *differ {
 func newDifferForKey(key string) *differ {
 	return &differ{
 		key:      key,
-		allKeys1: make(map[string]bool),
-		allKeys2: make(map[string]bool),
+		allKeys1: new(sync.Map),
+		allKeys2: new(sync.Map),
 	}
 }
 
@@ -104,24 +104,30 @@ func (d *differ) diffKeys(ch1, ch2 chan []string, size1, size2 int64, bar *pb.Pr
 	return d.checkKeys("DB1", d.allKeys1) || d.checkKeys("DB2", d.allKeys2)
 }
 
-func (d *differ) checkKeys(name string, keys map[string]bool) bool {
-	if len(keys) > 0 {
+func (d *differ) checkKeys(name string, keys *sync.Map) bool {
+	length := 0
+	keys.Range(func(_, _ interface{}) bool {
+		length++
+
+		return true
+	})
+	if length > 0 {
 		logger.Debugf("Remaining keys for %v: %+v", name, keys)
 		return true
 	}
 	return false
 }
 
-func (d *differ) diffOnChan(ch chan []string, chanKeys, otherKeys map[string]bool,
+func (d *differ) diffOnChan(ch chan []string, chanKeys, otherKeys *sync.Map,
 	bar *pb.ProgressBar, wg *sync.WaitGroup, size int64) {
 	if size != 0 {
 		for keys := range ch {
 			for _, key := range keys {
-				if _, ok := otherKeys[key]; ok {
+				if _, ok := otherKeys.Load(key); ok {
 					// Delete matching keys as we go and don't add them to avoid consuming too much memory.
-					delete(otherKeys, key)
+					otherKeys.Delete(key)
 				} else {
-					chanKeys[key] = true
+					chanKeys.Store(key, "")
 				}
 			}
 		}
