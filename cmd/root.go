@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -302,7 +303,7 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 			// we call RESTORE similarly sets no TTL.
 			if ttl < 0 {
 				ttl = 0
-			} else {
+			} else if !strings.HasPrefix(ktv.key, "code") {
 				logger.Debugf("Key %v has expiry set to %v", ktv.key, ttl)
 			}
 			value, err := ktv.valueCmd.Result()
