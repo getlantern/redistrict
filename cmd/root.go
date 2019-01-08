@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
-	"github.com/gosuri/uiprogress"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -246,7 +245,6 @@ func (m *migrator) migrateKeys() {
 		panic(fmt.Sprintf("Error getting source database size: %v", err))
 	}
 
-	uiprogress.Start()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	bar := pb.New(int(length)).Prefix("KEYS *")
@@ -304,8 +302,9 @@ func (m *migrator) write(ch chan []string, bar *pb.ProgressBar, wg *sync.WaitGro
 			// we call RESTORE similarly sets no TTL.
 			if ttl < 0 {
 				ttl = 0
+			} else {
+				logger.Debugf("Key %v has expiry set to %v", ktv.key, ttl)
 			}
-			ttl = 0
 			value, err := ktv.valueCmd.Result()
 			if err != nil {
 				panic(fmt.Sprintf("Error reading value for key %v: %v", ktv.key, err))
