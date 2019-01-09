@@ -61,7 +61,6 @@ func (d *differ) diff() bool {
 	}
 
 	ch1 := make(chan []string)
-	ch2 := make(chan []string)
 
 	keysOnly := size1 != size2
 
@@ -69,19 +68,19 @@ func (d *differ) diff() bool {
 		return sclient.Scan(cursor, "", count).Result()
 	}, ch1, compareCount, keysOnly)
 
-	go genericReadWithClose("", func(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {
-		return dclient.Scan(cursor, "", count).Result()
-	}, ch2, compareCount, keysOnly)
-
 	var bar *pb.ProgressBar
 	var differ bool
 	if keysOnly {
 		logger.Debugf("Databases have different sizes: %v and %v...determining differing keys", size1, size2)
+		ch2 := make(chan []string)
+		go genericReadWithClose("", func(key string, cursor uint64, match string, count int64) ([]string, uint64, error) {
+			return dclient.Scan(cursor, "", count).Result()
+		}, ch2, compareCount, keysOnly)
 		bar = pb.StartNew(int(size1) + int(size2))
 		differ = d.diffKeys(ch1, ch2, size1, size2, bar)
 	} else {
 		bar = pb.StartNew(int(size1))
-		differ = d.resultsDiffer(ch1, ch2, size1, bar)
+		differ = d.resultsDiffer(ch1, size1, bar)
 	}
 
 	bar.FinishPrint(fmt.Sprintf("The End! Redises are different: %v", differ))
@@ -89,9 +88,9 @@ func (d *differ) diff() bool {
 }
 
 type ktv struct {
-	key      string
-	ttlCmd   *redis.DurationCmd
-	valueCmd *redis.StringCmd
+	key string
+	val string
+	ttl time.Duration
 }
 
 func (d *differ) diffKeys(ch1, ch2 chan []string, size1, size2 int64, bar *pb.ProgressBar) bool {
@@ -120,63 +119,54 @@ func (d *differ) checkKeys(name string, keys *sync.Map) bool {
 
 func (d *differ) diffOnChan(ch chan []string, chanKeys, otherKeys *sync.Map,
 	bar *pb.ProgressBar, wg *sync.WaitGroup, size int64) {
-	if size != 0 {
-		for keys := range ch {
-			for _, key := range keys {
-				if _, ok := otherKeys.Load(key); ok {
-					// Delete matching keys as we go and don't add them to avoid consuming too much memory.
-					otherKeys.Delete(key)
-				} else {
-					chanKeys.Store(key, "")
-				}
-				bar.Increment()
+	defer wg.Done()
+	if size == 0 {
+		return
+	}
+	for keys := range ch {
+		for _, key := range keys {
+			if _, ok := otherKeys.Load(key); ok {
+				// Delete matching keys as we go and don't add them to avoid consuming too much memory.
+				otherKeys.Delete(key)
+			} else {
+				chanKeys.Store(key, "")
 			}
+			bar.Increment()
 		}
 	}
-
-	wg.Done()
 }
 
-func (d *differ) resultsDiffer(ch1, ch2 chan []string, size int64, bar *pb.ProgressBar) bool {
+func (d *differ) resultsDiffer(ch chan []string, size int64, bar *pb.ProgressBar) bool {
 	if size == 0 {
 		return false
 	}
-	pipeline1 := sclient.Pipeline()
-	pipeline2 := dclient.Pipeline()
-	index := int64(0)
+	processed := int64(0)
 	for {
-		keys1 := <-ch1
-		keys2 := <-ch2
-		bar.Increment()
-		if len(keys1) != len(keys2) {
-			logger.Debugf("Key length mismatch: %v, %v", len(keys1), len(keys2))
+		keys := <-ch
+		ktvs1, diffDetected1 := d.fetchKTVs(keys, sclient)
+		ktvs2, diffDetected2 := d.fetchKTVs(keys, dclient)
+		if diffDetected1 || diffDetected2 {
 			return true
 		}
-
-		ktvs1 := d.ktvs(keys1, pipeline1)
-		ktvs2 := d.ktvs(keys2, pipeline2)
 
 		if d.ktvArraysDiffer(ktvs1, ktvs2) {
 			return true
 		}
 
-		index++
-		if index == size {
+		processed += int64(len(keys))
+		if processed == size {
 			break
 		}
 	}
 	return false
 }
 
-func (d *differ) ktvArraysDiffer(vals1, vals2 []ktv) bool {
-	if len(vals1) != len(vals2) {
-		return true
-	}
-	size := len(vals1)
+func (d *differ) ktvArraysDiffer(ktvs1, ktvs2 []*ktv) bool {
+	size := len(ktvs1)
 
 	for i := 0; i < size; i++ {
-		a := vals1[i]
-		b := vals2[i]
+		a := ktvs1[i]
+		b := ktvs2[i]
 		if d.ktvsDiffer(a, b) {
 			return true
 		}
@@ -184,58 +174,44 @@ func (d *differ) ktvArraysDiffer(vals1, vals2 []ktv) bool {
 	return false
 }
 
-func (d *differ) ktvsDiffer(a, b ktv) bool {
+func (d *differ) ktvsDiffer(a, b *ktv) bool {
 	if a.key != b.key {
 		logger.Debugf("Keys differ: %v, %v", a.key, b.key)
 		return true
 	}
 
-	if d.ttl(a) != d.ttl(b) {
-		logger.Debugf("TTLs differ for key %v: %v != %v", b.key, d.ttl(a), d.ttl(b))
+	if a.ttl != b.ttl {
+		logger.Debugf("TTLs differ for key %v: %v != %v", b.key, a.ttl, b.ttl)
 		return true
 	}
 
-	if d.val(a) != d.val(b) {
-		logger.Debugf("Vals differ for key %v: %v != %v", b.key, d.val(a), d.val(b))
+	if a.val != b.val {
+		logger.Debugf("Vals differ for key %v: %v != %v", b.key, a.val, b.val)
 		return true
 	}
 	return false
 }
 
-func (d *differ) ttl(k ktv) time.Duration {
-	ttl, err := k.ttlCmd.Result()
+func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) {
+	ktvs := make([]*ktv, len(keys))
+	vals, err := rclient.MGet(keys...).Result()
 	if err != nil {
-		panic(fmt.Sprintf("Error reading key %v: %v", k.key, err))
+		panic(fmt.Sprintf("Error reading keys %v", err))
 	}
-	return ttl
-}
 
-func (d *differ) val(k ktv) string {
-	val, err := k.valueCmd.Result()
-	if err != nil {
-		panic(fmt.Sprintf("Error reading value for key %v: %v", k.key, err))
-	}
-	return val
-}
-
-func (d *differ) ktvs(keys []string, pipe redis.Pipeliner) []ktv {
-	ktvs := make([]ktv, 0)
-	n := len(keys)
-	for i := 0; i < n; i++ {
-		key := keys[i]
-		if _, ok := largeKeys[key]; ok {
-			continue
+	for i, key := range keys {
+		//logger.Debugf("val for index %v is %v", i, vals[i])
+		if vals[i] == nil {
+			// This indicates the key did not exist in the database.
+			return nil, true
 		}
-
-		ttlCmd := pipe.PTTL(key)
-		dumpCmd := pipe.Dump(key)
-		newKTV := ktv{key: key, ttlCmd: ttlCmd, valueCmd: dumpCmd}
-		ktvs = append(ktvs, newKTV)
+		ktv := &ktv{
+			key: key,
+			val: vals[i].(string),
+			// This is what the redis client sets when there's no TTL.
+			ttl: -1 * time.Millisecond,
+		}
+		ktvs[i] = ktv
 	}
-
-	if _, err := pipe.Exec(); err != nil {
-		panic(fmt.Sprintf("Error execing source pipeline: %v", err))
-	}
-
-	return ktvs
+	return ktvs, false
 }
