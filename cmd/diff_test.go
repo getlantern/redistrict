@@ -2,11 +2,83 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	pb "gopkg.in/cheggaaa/pb.v1"
 )
+
+func TestDiffOnChan(t *testing.T) {
+	ch := make(chan []string, 10)
+	d := newDiffer()
+	d.ignoreKeys = "code:.*"
+
+	size := 0
+	for i := 0; i < 10; i++ {
+		keys := make([]string, 4)
+		for j := 0; j < len(keys); j++ {
+			keys[j] = "code:" + strconv.Itoa(i) + strconv.Itoa(j)
+			size++
+		}
+		ch <- keys
+	}
+
+	chanKeys := new(sync.Map)
+	otherKeys := new(sync.Map)
+
+	bar := pb.StartNew(int(size))
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go d.diffOnChan(ch, chanKeys, otherKeys, bar, &wg, int64(size))
+	close(ch)
+	wg.Wait()
+	chanKeyLen := mapLength(chanKeys)
+	otherKeyLen := mapLength(otherKeys)
+	assert.Equal(t, 0, chanKeyLen)
+	assert.Equal(t, 0, otherKeyLen)
+	assert.Equal(t, int64(size), bar.Get())
+
+	ch1 := make(chan []string, 10)
+	size = 0
+	for i := 0; i < 10; i++ {
+		keys := make([]string, 4)
+		for j := 0; j < len(keys); j++ {
+			keys[j] = "codenomatch" + strconv.Itoa(i) + strconv.Itoa(j)
+			size++
+		}
+		ch1 <- keys
+	}
+
+	bar = pb.StartNew(int(size))
+
+	var wg1 sync.WaitGroup
+	wg1.Add(1)
+
+	go d.diffOnChan(ch1, chanKeys, otherKeys, bar, &wg1, int64(size))
+
+	close(ch1)
+	wg1.Wait()
+
+	chanKeyLen = mapLength(chanKeys)
+	otherKeyLen = mapLength(otherKeys)
+	assert.Equal(t, size, chanKeyLen)
+	assert.Equal(t, 0, otherKeyLen)
+	assert.Equal(t, int64(size), bar.Get())
+}
+
+func mapLength(mapped *sync.Map) int {
+	length := 0
+	mapped.Range(func(_, _ interface{}) bool {
+		length++
+		return true
+	})
+	return length
+}
 
 // TestFetchKTVs tests the fetchKTVs function.
 func TestFetchKTVs(t *testing.T) {

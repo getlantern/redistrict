@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"regexp"
 	"sync"
 	"time"
 
@@ -13,10 +14,12 @@ import (
 const compareCount = 4000
 
 type differ struct {
-	key      string
-	allKeys1 *sync.Map
-	allKeys2 *sync.Map
+	allKeys1   *sync.Map
+	allKeys2   *sync.Map
+	ignoreKeys string
 }
+
+var d = newDiffer()
 
 // diffCmd is for comparing two redis databases.
 var diffCmd = &cobra.Command{
@@ -28,23 +31,18 @@ var diffCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(diffCmd)
-	diffCmd.Flags().StringVarP(&cmdKey, "key", "k", "", "A specific key to compare, if any")
+	diffCmd.Flags().StringVarP(&d.ignoreKeys, "ignorekeys", "", "", "Regex for keys to ignore")
 }
 
 func newDiffer() *differ {
-	return newDifferForKey("")
-}
-
-func newDifferForKey(key string) *differ {
 	return &differ{
-		key:      key,
 		allKeys1: new(sync.Map),
 		allKeys2: new(sync.Map),
 	}
 }
 
 func diff(cmd *cobra.Command, args []string) {
-	var d = newDifferForKey(cmdKey)
+	var d = newDiffer()
 	d.diff()
 }
 
@@ -123,8 +121,13 @@ func (d *differ) diffOnChan(ch chan []string, chanKeys, otherKeys *sync.Map,
 	if size == 0 {
 		return
 	}
+	var matchesKey = regexp.MustCompile(d.ignoreKeys)
 	for keys := range ch {
 		for _, key := range keys {
+			if d.ignoreKeys != "" && matchesKey.MatchString(key) {
+				bar.Increment()
+				continue
+			}
 			if _, ok := otherKeys.Load(key); ok {
 				// Delete matching keys as we go and don't add them to avoid consuming too much memory.
 				otherKeys.Delete(key)
