@@ -207,7 +207,7 @@ func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) 
 	for i, key := range keys {
 		//logger.Debugf("val for index %v is %v", i, vals[i])
 		if vals[i] == nil {
-			logger.Debugf("val for index %v is %v", i, vals[i])
+			logger.Debugf("val for index %v is %v for key %v", i, vals[i], key)
 			// This indicates the key did not exist in the database.
 			return nil, true
 		}
