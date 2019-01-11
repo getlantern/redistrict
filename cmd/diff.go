@@ -105,7 +105,6 @@ func (d *differ) checkKeys(name string, keys *sync.Map) bool {
 	length := 0
 	keys.Range(func(_, _ interface{}) bool {
 		length++
-
 		return true
 	})
 	if length > 0 {
@@ -149,15 +148,18 @@ func (d *differ) resultsDiffer(ch chan []string, size int64, bar *pb.ProgressBar
 		ktvs1, diffDetected1 := d.fetchKTVs(keys, sclient)
 		ktvs2, diffDetected2 := d.fetchKTVs(keys, dclient)
 		if diffDetected1 || diffDetected2 {
+			logger.Debug("Diff detected")
 			return true
 		}
 
 		if d.ktvArraysDiffer(ktvs1, ktvs2) {
+			logger.Debug("KTV arrays differ")
 			return true
 		}
 
 		processed += int64(len(keys))
 		if processed == size {
+			logger.Debug("Processed all keys")
 			break
 		}
 	}
