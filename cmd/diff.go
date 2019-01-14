@@ -198,7 +198,7 @@ func (d *differ) ktvsDiffer(a, b *ktv) bool {
 }
 
 func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) {
-	ktvs := make([]*ktv, len(keys))
+	ktvs := make([]*ktv, 0)
 	vals, err := rclient.MGet(keys...).Result()
 	if err != nil {
 		panic(fmt.Sprintf("Error reading keys %v", err))
@@ -207,9 +207,11 @@ func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) 
 	for i, key := range keys {
 		//logger.Debugf("val for index %v is %v", i, vals[i])
 		if vals[i] == nil {
+			// This indicates a non-string type.
 			logger.Debugf("val for index %v is %v for key %v", i, vals[i], key)
 			// This indicates the key did not exist in the database.
-			return nil, true
+			//return nil, true
+			continue
 		}
 		ktv := &ktv{
 			key: key,
@@ -217,7 +219,7 @@ func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) 
 			// This is what the redis client sets when there's no TTL.
 			ttl: -1 * time.Millisecond,
 		}
-		ktvs[i] = ktv
+		ktvs = append(ktvs, ktv)
 	}
 	return ktvs, false
 }
