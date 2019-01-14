@@ -208,7 +208,7 @@ func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) 
 		//logger.Debugf("val for index %v is %v", i, vals[i])
 		if vals[i] == nil {
 			// This indicates a non-string type.
-			logger.Debugf("val for index %v is %v for key %v", i, vals[i], key)
+			//logger.Debugf("val for index %v is %v for key %v", i, vals[i], key)
 			// This indicates the key did not exist in the database.
 			//return nil, true
 			continue
