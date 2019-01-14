@@ -152,7 +152,7 @@ func (d *differ) resultsDiffer(ch chan []string, size int64, bar *pb.ProgressBar
 			return true
 		}
 
-		if d.ktvArraysDiffer(ktvs1, ktvs2) {
+		if d.ktvArraysDiffer(ktvs1, ktvs2, bar) {
 			logger.Debug("KTV arrays differ")
 			return true
 		}
@@ -166,7 +166,7 @@ func (d *differ) resultsDiffer(ch chan []string, size int64, bar *pb.ProgressBar
 	return false
 }
 
-func (d *differ) ktvArraysDiffer(ktvs1, ktvs2 []*ktv) bool {
+func (d *differ) ktvArraysDiffer(ktvs1, ktvs2 []*ktv, bar *pb.ProgressBar) bool {
 	size := len(ktvs1)
 
 	for i := 0; i < size; i++ {
@@ -175,6 +175,7 @@ func (d *differ) ktvArraysDiffer(ktvs1, ktvs2 []*ktv) bool {
 		if d.ktvsDiffer(a, b) {
 			return true
 		}
+		bar.Increment()
 	}
 	return false
 }
@@ -206,19 +207,15 @@ func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) 
 
 	for i, key := range keys {
 		//logger.Debugf("val for index %v is %v", i, vals[i])
-		if vals[i] == nil {
-			// This indicates a non-string type.
-			//logger.Debugf("val for index %v is %v for key %v", i, vals[i], key)
-			// This indicates the key did not exist in the database.
-			//return nil, true
-			continue
-		}
 		ktv := &ktv{
 			key: key,
-			val: vals[i].(string),
 			// This is what the redis client sets when there's no TTL.
 			ttl: -1 * time.Millisecond,
 		}
+		if vals[i] != nil {
+			ktv.val = vals[i].(string)
+		}
+
 		ktvs = append(ktvs, ktv)
 	}
 	return ktvs, false
