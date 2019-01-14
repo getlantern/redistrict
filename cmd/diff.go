@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -14,9 +15,10 @@ import (
 const compareCount = 4000
 
 type differ struct {
-	allKeys1   *sync.Map
-	allKeys2   *sync.Map
-	ignoreKeys string
+	allKeys1      *sync.Map
+	allKeys2      *sync.Map
+	ignoreKeys    string
+	valsProcessed uint64
 }
 
 var d = newDiffer()
@@ -81,7 +83,13 @@ func (d *differ) diff() bool {
 		differ = d.resultsDiffer(ch1, size1, bar)
 	}
 
-	bar.FinishPrint(fmt.Sprintf("The End! Redises are different: %v", differ))
+	var msg string
+	if differ {
+		msg = "The redises are different!"
+	} else {
+		msg = fmt.Sprintf("The redises are the same for all keys and for %v string values", d.valsProcessed)
+	}
+	bar.FinishPrint(msg)
 	return differ
 }
 
@@ -129,6 +137,7 @@ func (d *differ) diffOnChan(ch chan []string, chanKeys, otherKeys *sync.Map,
 			}
 			if _, ok := otherKeys.Load(key); ok {
 				// Delete matching keys as we go and don't add them to avoid consuming too much memory.
+				atomic.AddUint64(&d.valsProcessed, 1)
 				otherKeys.Delete(key)
 			} else {
 				chanKeys.Store(key, "")
@@ -214,6 +223,7 @@ func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) 
 		}
 		if vals[i] != nil {
 			ktv.val = vals[i].(string)
+			atomic.AddUint64(&d.valsProcessed, 1)
 		}
 
 		ktvs = append(ktvs, ktv)
