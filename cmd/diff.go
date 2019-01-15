@@ -147,7 +147,7 @@ func (d *differ) resultsDiffer(ch chan []string, size int64, bar *pb.ProgressBar
 	processed := int64(0)
 	for {
 		keys := <-ch
-		if d.valuesDiffer(keys) {
+		if d.valuesDiffer(keys, bar) {
 			return true
 		}
 
@@ -159,7 +159,7 @@ func (d *differ) resultsDiffer(ch chan []string, size int64, bar *pb.ProgressBar
 	return false
 }
 
-func (d *differ) valuesDiffer(keys []string) bool {
+func (d *differ) valuesDiffer(keys []string, bar *pb.ProgressBar) bool {
 	spl := sclient.Pipeline()
 	for _, key := range keys {
 		spl.Type(key)
@@ -206,6 +206,7 @@ func (d *differ) valuesDiffer(keys []string) bool {
 			logger.Debug("handling default")
 		}
 		atomic.AddUint64(&d.valsProcessed, uint64(1))
+		bar.Increment()
 	}
 	return false
 }
