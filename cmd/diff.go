@@ -176,27 +176,22 @@ func (d *differ) valuesDiffer(keys []string, bar *pb.ProgressBar) bool {
 		keyType := d.toVal(cmd)
 		switch keyType {
 		case "string":
-			logger.Debug("handling string")
 			if d.stringDiffers(keys[i]) {
 				return true
 			}
 		case "list":
-			logger.Debug("handling list")
 			if d.listDiffers(keys[i]) {
 				return true
 			}
 		case "set":
-			logger.Debug("handling set")
 			if d.setDiffers(keys[i], sclient.SScan, dclient.SScan, false) {
 				return true
 			}
 		case "zset":
-			logger.Debug("handling zset")
 			if d.setDiffers(keys[i], sclient.ZScan, dclient.ZScan, true) {
 				return true
 			}
 		case "hash":
-			logger.Debug("handling hash")
 			if d.hashDiffers(keys[i]) {
 				return true
 			}
