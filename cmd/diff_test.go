@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/stretchr/testify/assert"
 	pb "gopkg.in/cheggaaa/pb.v1"
 )
@@ -80,63 +81,12 @@ func mapLength(mapped *sync.Map) int {
 	return length
 }
 
-// TestFetchKTVs tests the fetchKTVs function.
-func TestFetchKTVs(t *testing.T) {
-	var m = newMigrator()
-
-	m.flushdst = true
-	m.flushsrc = true
-
-	// Just use a separate database on the single redis instance.
-	m.dstdb = 1
-	m.initRedis()
-
-	d := newDiffer()
-
-	sclient.FlushAll()
-	dclient.FlushAll()
-
-	keys := make([]string, 0)
-	testLength := 40
-	for i := 0; i < testLength; i++ {
-		key := fmt.Sprintf("key-%d", i)
-		keys = append(keys, key)
-		err := sclient.Set(key, fmt.Sprintf("value-%d", i), 0*time.Second).Err()
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	ktvs, diffDetected := d.fetchKTVs(keys, sclient)
-	assert.False(t, diffDetected)
-	assert.Equal(t, len(ktvs), len(keys))
-
-	// Now query for keys that don't exist.
-	keys = make([]string, 0)
-	keys = append(keys, "doesnotexists48284")
-	_, diffDetected = d.fetchKTVs(keys, sclient)
-	assert.True(t, diffDetected)
-	sclient.FlushAll()
-}
-
 // TestSameDB tests two equal databases.
 func TestSameDB(t *testing.T) {
-	var m = newMigrator()
-
-	m.flushdst = true
-	m.flushsrc = true
-
-	// Just use a separate database on the single redis instance.
-	m.dstdb = 1
-	m.initRedis()
-
-	d := newDiffer()
-
-	sclient.FlushAll()
-	dclient.FlushAll()
+	d := initTest()
 
 	keys := make([]string, 0)
-	testLength := 40
+	testLength := 10
 	for i := 0; i < testLength; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		val := fmt.Sprintf("value-%d", i)
@@ -162,22 +112,10 @@ func TestSameDB(t *testing.T) {
 
 // TestValuesDiffer tests two databases with equal keys but different values.
 func TestValuesDiffer(t *testing.T) {
-	var m = newMigrator()
-
-	m.flushdst = true
-	m.flushsrc = true
-
-	// Just use a separate database on the single redis instance.
-	m.dstdb = 1
-	m.initRedis()
-
-	d := newDiffer()
-
-	sclient.FlushAll()
-	dclient.FlushAll()
+	d := initTest()
 
 	keys := make([]string, 0)
-	testLength := 40
+	testLength := 10
 	for i := 0; i < testLength; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		val := fmt.Sprintf("value-%d", i)
@@ -200,22 +138,10 @@ func TestValuesDiffer(t *testing.T) {
 
 // TestKeysDiffer tests two databases with equal values but different keys.
 func TestKeysDiffer(t *testing.T) {
-	var m = newMigrator()
-
-	m.flushdst = true
-	m.flushsrc = true
-
-	// Just use a separate database on the single redis instance.
-	m.dstdb = 1
-	m.initRedis()
-
-	d := newDiffer()
-
-	sclient.FlushAll()
-	dclient.FlushAll()
+	d := initTest()
 
 	keys := make([]string, 0)
-	testLength := 40
+	testLength := 10
 	for i := 0; i < testLength-1; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		val := fmt.Sprintf("value-%d", i)
@@ -237,21 +163,125 @@ func TestKeysDiffer(t *testing.T) {
 	sclient.FlushAll()
 }
 
+func TestHashDiffers(t *testing.T) {
+	d := initTest()
+
+	keys := make([]string, 0)
+	testLength := 5
+	baseKey := "hkey"
+	for i := 0; i < testLength; i++ {
+		key := fmt.Sprintf("key-%d", i)
+		vals := make([]string, 0)
+		for j := 0; j < testLength; j++ {
+			val := fmt.Sprintf("value-%d", j)
+			vals = append(vals, val)
+			assert.NoError(t, sclient.HSet(baseKey, key, val).Err())
+			assert.NoError(t, dclient.HSet(baseKey, key, val).Err())
+		}
+		keys = append(keys, key)
+
+	}
+	assert.Equal(t, int64(1), sclient.DBSize().Val())
+	assert.Equal(t, int64(1), dclient.DBSize().Val())
+
+	assert.False(t, d.diff())
+
+	diff, processed := d.hashDiffersWithCount(baseKey, int64(2))
+	assert.False(t, diff)
+	assert.Equal(t, testLength, processed)
+
+	for i, key := range keys {
+		sclient.HSet(baseKey, key, fmt.Sprintf("newval %v", i))
+		diff, _ := d.hashDiffersWithCount(baseKey, int64(2))
+		assert.True(t, diff, "Databases should be different on values for hash key %v", key)
+	}
+
+	dclient.FlushAll()
+	sclient.FlushAll()
+}
+
+// TestSetDiffers tests two databases with equal values but different keys.
+func TestSetDiffers(t *testing.T) {
+	d := initTest()
+
+	keys := make([]string, 0)
+	testLength := 10
+	for i := 0; i < testLength; i++ {
+		key := fmt.Sprintf("key-%d", i)
+		vals := make([]string, 0)
+		for j := 0; j < testLength; j++ {
+			vals = append(vals, fmt.Sprintf("value-%d", j))
+		}
+		keys = append(keys, key)
+		assert.NoError(t, sclient.SAdd(key, vals).Err())
+		assert.NoError(t, dclient.SAdd(key, vals).Err())
+	}
+	assert.Equal(t, int64(testLength), sclient.DBSize().Val())
+	assert.Equal(t, int64(testLength), dclient.DBSize().Val())
+
+	diffDetected := d.diff()
+	assert.False(t, diffDetected)
+
+	for _, key := range keys {
+		diff, processed := d.setDiffersWithCount(key, int64(7), sclient.SScan, dclient.SScan, false)
+		assert.False(t, diff)
+		assert.Equal(t, testLength, processed)
+	}
+
+	for _, key := range keys {
+		sclient.SAdd(key, "newval")
+		diff, _ := d.setDiffersWithCount(key, int64(7), sclient.SScan, dclient.SScan, false)
+		assert.True(t, diff)
+	}
+	dclient.FlushAll()
+	sclient.FlushAll()
+}
+
+// TestZSetDiffers tests two databases with equal values but different keys.
+func TestZSetDiffers(t *testing.T) {
+	d := initTest()
+
+	keys := make([]string, 0)
+	testLength := 4
+	for i := 0; i < testLength; i++ {
+		key := fmt.Sprintf("key-%d", i)
+		keys = append(keys, key)
+		vals := make([]redis.Z, 0)
+		for j := 0; j < testLength; j++ {
+			vals = append(vals, redis.Z{
+				Member: fmt.Sprintf("value-%d", j),
+				//Score:  float64(j),
+			})
+		}
+
+		assert.NoError(t, sclient.ZAdd(key, vals...).Err())
+		assert.NoError(t, dclient.ZAdd(key, vals...).Err())
+	}
+	logger.Debugf("Keys: %+v", keys)
+	assert.Equal(t, int64(testLength), sclient.DBSize().Val())
+	assert.Equal(t, int64(testLength), dclient.DBSize().Val())
+
+	diffDetected := d.diff()
+	assert.False(t, diffDetected)
+
+	for _, key := range keys {
+		diff, _ := d.setDiffersWithCount(key, int64(3), sclient.ZScan, dclient.ZScan, true)
+		assert.False(t, diff)
+		//assert.Equal(t, testLength, processed)
+	}
+
+	for _, key := range keys {
+		sclient.ZAdd(key, redis.Z{Member: "newval"})
+		diff, _ := d.setDiffersWithCount(key, int64(3), sclient.ZScan, dclient.ZScan, true)
+		assert.True(t, diff)
+	}
+	dclient.FlushAll()
+	sclient.FlushAll()
+}
+
 // TestExtraKey tests adding an extra key to one database.
 func TestExtraKey(t *testing.T) {
-	var m = newMigrator()
-
-	m.flushdst = true
-	m.flushsrc = true
-
-	// Just use a separate database on the single redis instance.
-	m.dstdb = 1
-	m.initRedis()
-
-	d := newDiffer()
-
-	sclient.FlushAll()
-	dclient.FlushAll()
+	d := initTest()
 
 	keys := make([]string, 0)
 	testLength := 40
@@ -286,19 +316,7 @@ func TestExtraKey(t *testing.T) {
 
 // TestDiff tests the diff function.
 func TestDiff(t *testing.T) {
-	var m = newMigrator()
-
-	m.flushdst = true
-	m.flushsrc = true
-
-	// Just use a separate database on the single redis instance.
-	m.dstdb = 1
-	m.initRedis()
-
-	d := newDiffer()
-
-	sclient.FlushAll()
-	dclient.FlushAll()
+	d := initTest()
 
 	testkey := "list1"
 	testLength := 40
@@ -360,4 +378,19 @@ func TestDiff(t *testing.T) {
 	logger.Debug("Testing two empty DBs")
 	// Test two empty DBs!
 	assert.False(t, d.diff())
+}
+
+func initTest() *differ {
+	var m = newMigrator()
+
+	m.flushdst = true
+	m.flushsrc = true
+
+	// Just use a separate database on the single redis instance.
+	m.dstdb = 1
+	m.initRedis()
+
+	sclient.FlushAll()
+	dclient.FlushAll()
+	return newDiffer()
 }

@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/spf13/cobra"
@@ -21,19 +21,19 @@ type differ struct {
 	valsProcessed uint64
 }
 
-var d = newDiffer()
+var di = newDiffer()
 
 // diffCmd is for comparing two redis databases.
 var diffCmd = &cobra.Command{
 	Use:   "diff",
 	Short: "Compares two redis databases",
 	Long:  `Compares two redis databases using scans and pipelining`,
-	Run:   diff,
+	Run:   di.diffCommand,
 }
 
 func init() {
 	rootCmd.AddCommand(diffCmd)
-	diffCmd.Flags().StringVarP(&d.ignoreKeys, "ignorekeys", "", "", "Regex for keys to ignore")
+	diffCmd.Flags().StringVarP(&di.ignoreKeys, "ignorekeys", "", "", "Regex for keys to ignore")
 }
 
 func newDiffer() *differ {
@@ -43,8 +43,7 @@ func newDiffer() *differ {
 	}
 }
 
-func diff(cmd *cobra.Command, args []string) {
-	var d = newDiffer()
+func (d *differ) diffCommand(cmd *cobra.Command, args []string) {
 	d.diff()
 }
 
@@ -84,19 +83,13 @@ func (d *differ) diff() bool {
 	}
 
 	var msg string
-	if differ {
+	if keysOnly || differ {
 		msg = "The redises are different!"
 	} else {
 		msg = fmt.Sprintf("The redises are the same for all keys and for %v string values", d.valsProcessed)
 	}
 	bar.FinishPrint(msg)
 	return differ
-}
-
-type ktv struct {
-	key string
-	val string
-	ttl time.Duration
 }
 
 func (d *differ) diffKeys(ch1, ch2 chan []string, size1, size2 int64, bar *pb.ProgressBar) bool {
@@ -154,79 +147,237 @@ func (d *differ) resultsDiffer(ch chan []string, size int64, bar *pb.ProgressBar
 	processed := int64(0)
 	for {
 		keys := <-ch
-		ktvs1, diffDetected1 := d.fetchKTVs(keys, sclient)
-		ktvs2, diffDetected2 := d.fetchKTVs(keys, dclient)
-		if diffDetected1 || diffDetected2 {
-			logger.Debug("Diff detected")
-			return true
-		}
-
-		if d.ktvArraysDiffer(ktvs1, ktvs2, bar) {
-			logger.Debug("KTV arrays differ")
+		if d.valuesDiffer(keys) {
 			return true
 		}
 
 		processed += int64(len(keys))
 		if processed == size {
-			logger.Debug("Processed all keys")
 			break
 		}
 	}
 	return false
 }
 
-func (d *differ) ktvArraysDiffer(ktvs1, ktvs2 []*ktv, bar *pb.ProgressBar) bool {
-	size := len(ktvs1)
+func (d *differ) valuesDiffer(keys []string) bool {
+	spl := sclient.Pipeline()
+	for _, key := range keys {
+		spl.Type(key)
+	}
 
-	for i := 0; i < size; i++ {
-		a := ktvs1[i]
-		b := ktvs2[i]
-		if d.ktvsDiffer(a, b) {
+	cmds, err := spl.Exec()
+	if err != nil {
+		panic(fmt.Sprintf("Could not exec types pipeline: %v", err))
+	}
+	spl.Close()
+
+	//dpl := dclient.Pipeline()
+	for i, cmd := range cmds {
+		keyType := d.toVal(cmd)
+		switch keyType {
+		case "string":
+			logger.Debug("handling string")
+			if d.stringDiffers(keys[i]) {
+				return true
+			}
+		case "list":
+			logger.Debug("handling list")
+			if d.listDiffers(keys[i]) {
+				return true
+			}
+		case "set":
+			logger.Debug("handling set")
+			if d.setDiffers(keys[i], sclient.SScan, dclient.SScan, false) {
+				return true
+			}
+		case "zset":
+			logger.Debug("handling zset")
+			if d.setDiffers(keys[i], sclient.ZScan, dclient.ZScan, true) {
+				return true
+			}
+		case "hash":
+			logger.Debug("handling hash")
+			if d.hashDiffers(keys[i]) {
+				return true
+			}
+		case "stream":
+			logger.Debug("handling stream")
+		default:
+			logger.Debug("handling default")
+		}
+		atomic.AddUint64(&d.valsProcessed, uint64(1))
+	}
+	return false
+}
+
+type resulter interface {
+	Result() (string, error)
+}
+
+type sliceResulter interface {
+	Result() ([]string, error)
+}
+
+type scanResulter interface {
+	Result() ([]string, uint64, error)
+}
+
+func (d *differ) toVal(cmd redis.Cmder) string {
+	switch cmd.(type) {
+	case *redis.StatusCmd:
+		return d.result(cmd.(*redis.StatusCmd))
+	case *redis.StringCmd:
+		return d.result(cmd.(*redis.StringCmd))
+	default:
+		logger.Debug("Got other type: %v *************", reflect.TypeOf(cmd))
+	}
+	panic(fmt.Sprintf("Could not handle command %v", cmd))
+}
+
+func (d *differ) result(res resulter) string {
+	if val, err := res.Result(); err != nil {
+		panic(fmt.Sprintf("Could not result for type pipeline: %v", err))
+	} else {
+		return val
+	}
+}
+
+func (d *differ) sliceResult(res sliceResulter) []string {
+	if val, err := res.Result(); err != nil {
+		panic(fmt.Sprintf("Could not result for type pipeline: %v", err))
+	} else {
+		return val
+	}
+}
+
+func (d *differ) scanResult(res scanResulter) ([]string, uint64) {
+	if val, cursor, err := res.Result(); err != nil {
+		panic(fmt.Sprintf("Could not result for type pipeline: %v", err))
+	} else {
+		return val, cursor
+	}
+}
+
+func (d *differ) stringDiffers(key string) bool {
+	return sclient.Get(key).Val() != dclient.Get(key).Val()
+}
+
+func (d *differ) listDiffers(key string) bool {
+	const count = int64(10000)
+	cursor := int64(0)
+	for {
+		newCursor := cursor + count
+		svals := d.sliceResult(sclient.LRange(key, cursor, newCursor))
+		dvals := d.sliceResult(dclient.LRange(key, cursor, newCursor))
+		if len(svals) != len(dvals) {
 			return true
 		}
-		bar.Increment()
+		for i, v := range svals {
+			if v != dvals[i] {
+				return true
+			}
+		}
+		if len(svals) == 0 || len(dvals) == 0 {
+			break
+		}
+		cursor = newCursor + 1
 	}
 	return false
 }
 
-func (d *differ) ktvsDiffer(a, b *ktv) bool {
-	if a.key != b.key {
-		logger.Debugf("Keys differ: %v, %v", a.key, b.key)
-		return true
-	}
-
-	if a.ttl != b.ttl {
-		logger.Debugf("TTLs differ for key %v: %v != %v", b.key, a.ttl, b.ttl)
-		return true
-	}
-
-	if a.val != b.val {
-		logger.Debugf("Vals differ for key %v: %v != %v", b.key, a.val, b.val)
-		return true
-	}
-	return false
+func (d *differ) setDiffers(key string, source, dest scanf, skip bool) bool {
+	diff, _ := d.setDiffersWithCount(key, int64(10000), source, dest, skip)
+	return diff
 }
 
-func (d *differ) fetchKTVs(keys []string, rclient *redis.Client) ([]*ktv, bool) {
-	ktvs := make([]*ktv, 0)
-	vals, err := rclient.MGet(keys...).Result()
-	if err != nil {
-		panic(fmt.Sprintf("Error reading keys %v", err))
-	}
+type scanf func(string, uint64, string, int64) *redis.ScanCmd
 
-	for i, key := range keys {
-		//logger.Debugf("val for index %v is %v", i, vals[i])
-		ktv := &ktv{
-			key: key,
-			// This is what the redis client sets when there's no TTL.
-			ttl: -1 * time.Millisecond,
+func (d *differ) setDiffersWithCount(key string, count int64, source, dest scanf, skip bool) (bool, int) {
+	smap := make(map[string]bool)
+	dmap := make(map[string]bool)
+	scursor := uint64(0)
+	dcursor := uint64(0)
+	processed := 0
+	f := func(vals []string, a, b map[string]bool) {
+		for i, v := range vals {
+			// zsets include their score as well, which we skip.
+			if skip && i%2 != 0 {
+				continue
+			}
+			if _, ok := b[v]; ok {
+				delete(b, v)
+			} else {
+				a[v] = true
+			}
+			processed++
 		}
-		if vals[i] != nil {
-			ktv.val = vals[i].(string)
-			atomic.AddUint64(&d.valsProcessed, 1)
+	}
+	for {
+		var svals, dvals []string
+		svals, scursor = d.scanResult(source(key, scursor, "", count))
+		dvals, dcursor = d.scanResult(dest(key, dcursor, "", count))
+		f(svals, smap, dmap)
+		f(dvals, dmap, smap)
+
+		if scursor == 0 || dcursor == 0 {
+			break
+		}
+	}
+	if len(smap) != 0 || len(dmap) != 0 {
+		return true, processed / 2
+	}
+	return false, processed / 2
+}
+
+func (d *differ) hashDiffers(key string) bool {
+	differs, _ := d.hashDiffersWithCount(key, int64(10000))
+	return differs
+}
+
+func (d *differ) hashDiffersWithCount(key string, count int64) (bool, int) {
+	smap := make(map[string]string)
+	dmap := make(map[string]string)
+
+	scursor := uint64(0)
+	dcursor := uint64(0)
+	processed := 0
+	f := func(kvs []string, a, b map[string]string) bool {
+		for i := 0; i < len(kvs); i += 2 {
+			k := kvs[i]
+			v := kvs[i+1]
+			if bv, ok := b[k]; ok {
+				if bv == v {
+					// Remove this key from the other DB map to save memory -- at this
+					// point the keys and values check out and are equal.
+					delete(b, k)
+					processed++
+				} else {
+					return true
+				}
+			} else {
+				a[k] = v
+			}
+		}
+		return false
+	}
+	for {
+		var svals, dvals []string
+		svals, scursor = d.scanResult(sclient.HScan(key, scursor, "", count))
+		dvals, dcursor = d.scanResult(dclient.HScan(key, dcursor, "", count))
+
+		if f(svals, smap, dmap) {
+			return true, processed
+		}
+		if f(dvals, dmap, smap) {
+			return true, processed
 		}
 
-		ktvs = append(ktvs, ktv)
+		if scursor == 0 || dcursor == 0 {
+			break
+		}
 	}
-	return ktvs, false
+	if len(smap) != 0 || len(dmap) != 0 {
+		return true, processed
+	}
+	return false, processed
 }

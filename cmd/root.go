@@ -342,7 +342,7 @@ func (m *migrator) write(ch chan []string, bar progress, wg *sync.WaitGroup) {
 			if ttl < 0 {
 				ttl = 0
 			} else if !strings.HasPrefix(ktv.key, "code") {
-				logger.Debugf("Key %v has expiry set to %v", ktv.key, ttl)
+				//logger.Debugf("Key %v has expiry set to %v", ktv.key, ttl)
 			}
 			value, err := ktv.valueCmd.Result()
 			if err != nil {
