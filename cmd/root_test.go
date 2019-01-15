@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra/doc"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -18,12 +19,11 @@ func TestConfig(t *testing.T) {
 	empty := viper.GetStringSlice("does-not-exist")
 	assert.Equal(t, 0, len(empty))
 
-	/*
-		doc.GenMarkdownTree(rootCmd, "")
-		doc.GenMarkdownTree(hmigrateCmd, "")
-		doc.GenMarkdownTree(lmigrateCmd, "")
-		doc.GenMarkdownTree(smigrateCmd, "")
-	*/
+	doc.GenMarkdownTree(rootCmd, "")
+	doc.GenMarkdownTree(hmigrateCmd, "")
+	doc.GenMarkdownTree(lmigrateCmd, "")
+	doc.GenMarkdownTree(smigrateCmd, "")
+	doc.GenMarkdownTree(diffCmd, "")
 }
 
 var testMigFunc = func(k string, wg *sync.WaitGroup, pf poolFunc) int {

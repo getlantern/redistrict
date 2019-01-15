@@ -83,10 +83,12 @@ func (d *differ) diff() bool {
 	}
 
 	var msg string
-	if keysOnly || differ {
+	if size1 != size2 {
+		msg = "The redises have different sizes!"
+	} else if differ {
 		msg = "The redises are different!"
 	} else {
-		msg = fmt.Sprintf("The redises are the same for all keys and for %v string values", d.valsProcessed)
+		msg = "The redises are the same!"
 	}
 	bar.FinishPrint(msg)
 	return differ
@@ -273,6 +275,7 @@ func (d *differ) listDiffers(key string) bool {
 				return true
 			}
 		}
+
 		if len(svals) == 0 || len(dvals) == 0 {
 			break
 		}
@@ -302,10 +305,10 @@ func (d *differ) setDiffersWithCount(key string, count int64, source, dest scanf
 			}
 			if _, ok := b[v]; ok {
 				delete(b, v)
+				processed++
 			} else {
 				a[v] = true
 			}
-			processed++
 		}
 	}
 	for {
@@ -320,9 +323,9 @@ func (d *differ) setDiffersWithCount(key string, count int64, source, dest scanf
 		}
 	}
 	if len(smap) != 0 || len(dmap) != 0 {
-		return true, processed / 2
+		return true, processed
 	}
-	return false, processed / 2
+	return false, processed
 }
 
 func (d *differ) hashDiffers(key string) bool {

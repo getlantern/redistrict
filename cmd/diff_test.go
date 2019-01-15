@@ -200,7 +200,59 @@ func TestHashDiffers(t *testing.T) {
 	sclient.FlushAll()
 }
 
-// TestSetDiffers tests two databases with equal values but different keys.
+func TestListDiffers(t *testing.T) {
+	d := initTest()
+
+	keys := make([]string, 0)
+	testLength := 10
+	for i := 0; i < testLength; i++ {
+		key := fmt.Sprintf("key-%d", i)
+		vals := make([]string, 0)
+		for j := 0; j < testLength; j++ {
+			vals = append(vals, fmt.Sprintf("value-%d", j))
+		}
+		keys = append(keys, key)
+		assert.NoError(t, sclient.RPush(key, vals).Err())
+		assert.NoError(t, dclient.RPush(key, vals).Err())
+	}
+	assert.Equal(t, int64(testLength), sclient.DBSize().Val())
+	assert.Equal(t, int64(testLength), dclient.DBSize().Val())
+
+	diffDetected := d.diff()
+	assert.False(t, diffDetected)
+
+	for _, key := range keys {
+		//diff, processed := d.setDiffersWithCount(key, int64(7), sclient.SScan, dclient.SScan, false)
+		diff := d.listDiffers(key)
+		assert.False(t, diff)
+		//assert.Equal(t, testLength, processed)
+	}
+
+	for _, key := range keys {
+		sclient.RPush(key, "newval")
+		diff := d.listDiffers(key)
+		assert.True(t, diff)
+	}
+
+	// Now make them the same again
+	for _, key := range keys {
+		dclient.RPush(key, "newval")
+		diff := d.listDiffers(key)
+		assert.False(t, diff)
+	}
+
+	// Now change one value
+	key := keys[0]
+	sclient.RPop(key)
+	sclient.RPush(key, "different value")
+
+	diff := d.listDiffers(key)
+	assert.True(t, diff)
+
+	dclient.FlushAll()
+	sclient.FlushAll()
+}
+
 func TestSetDiffers(t *testing.T) {
 	d := initTest()
 
@@ -237,7 +289,6 @@ func TestSetDiffers(t *testing.T) {
 	sclient.FlushAll()
 }
 
-// TestZSetDiffers tests two databases with equal values but different keys.
 func TestZSetDiffers(t *testing.T) {
 	d := initTest()
 
