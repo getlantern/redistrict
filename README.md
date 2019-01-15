@@ -15,7 +15,11 @@ To find large keys in your database you can run:
 ./redis-cli --bigkeys
 ```
 
-You can install redistrict with:
+Redistrict also supports diffing two databases. This processes isn't quite as optimized as migration,
+so it's a bit slow, but unlike other options available it will work with large keys along the same
+lines as redistrict migration using the relevant scan variants.
+
+### Install
 
 ```
 go get -u github.com/getlantern/redistrict
@@ -54,6 +58,7 @@ redistrict [flags]
 ```
       --config string       config file (default is $HOME/.redistrict.yaml)
       --count int           The number of keys to scan on each pass (default 5000)
+      --dryrun              Do not actually perform the transfer.
   -d, --dst string          Destination redis host IP/name (default "127.0.0.1:6379")
       --dstauth string      Destination redis password
       --dstdb int           Redis db number, defaults to 0
@@ -61,16 +66,20 @@ redistrict [flags]
       --hashKeys strings    Key names of large hashes to automatically call hmigrate on, in the form --hashKeys="k1,k2"
   -h, --help                help for redistrict
       --listKeys strings    Key names of large lists to automatically call lmigrate on, in the form --listKeys="k1,k2"
+      --noprogress          Do not display progress bars.
       --setKeys strings     Key names of large sets to automatically call smigrate on, in the form --setKeys="k1,k2"
   -s, --src string          Source redis host IP/name (default "127.0.0.1:6379")
       --srcauth string      Source redis password
       --srcdb int           Redis db number, defaults to 0
-      --ssldstCert string   SSL certificate path for destination redis, if any.
-      --sslsrcCert string   SSL certificate path for source redis, if any.
+      --tlsdst              Use TLS to access the destination.
+      --tlsdstCert string   TLS certificate path for destination redis, if any. Implies tlsdst.
+      --tlssrc              Use TLS to access the source.
+      --tlssrcCert string   TLS certificate path for source redis, if any. Implies tlssrc.
 ```
 
 ### SEE ALSO
 
+* [redistrict diff](redistrict_diff.md)	 - Compares two redis databases
 * [redistrict hmigrate](redistrict_hmigrate.md)	 - Migrate a large hash at the specified key
 * [redistrict lmigrate](redistrict_lmigrate.md)	 - Migrate a large list at the specified key
 * [redistrict smigrate](redistrict_smigrate.md)	 - Migrate a large set at the specified key
