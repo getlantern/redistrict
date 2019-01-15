@@ -1,23 +1,20 @@
-## redistrict lmigrate
+## redistrict diff
 
-Migrate a large list at the specified key
+Compares two redis databases
 
 ### Synopsis
 
-Redis DUMP, RESTORE, and MIGRATE commands do not support key values larger than 512MB. This
-uses LRANGE to migrate large lists. This is essentially akin to a theoretical LMIGRATE redis
-command.
+Compares two redis databases using scans and pipelining
 
 ```
-redistrict lmigrate [flags]
+redistrict diff [flags]
 ```
 
 ### Options
 
 ```
-  -h, --help         help for lmigrate
-  -k, --key string   The key of the list to migrate
-      --lcount int   The number of list entries to scan on each pass (default 5000)
+  -h, --help                help for diff
+      --ignorekeys string   Regex for keys to ignore
 ```
 
 ### Options inherited from parent commands
