@@ -172,13 +172,11 @@ func (m *migrator) initRedis() {
 		logger.Info("Finished flushing destination redis...")
 	}
 
+	logger.Info("Connecting to destination redis")
 	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.tlsdstCert, m.tlsdst)
-	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.tlssrcCert, m.tlssrc)
 
-	// Note this is only exposed for tests to avoid letting the caller do something stupid...
-	if m.flushsrc {
-		//sclient.FlushDB()
-	}
+	logger.Info("Connecting to source redis")
+	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.tlssrcCert, m.tlssrc)
 }
 
 func (m *migrator) newClient(addr, password string, db int, certPath string, useTLS bool) *redis.Client {
