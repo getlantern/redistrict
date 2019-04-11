@@ -195,9 +195,11 @@ func (m *migrator) newClient(addr, password string, db int, certPath string, use
 	}
 	client := redis.NewClient(options)
 
-	if err := client.Ping().Err(); err != nil {
-		panic(fmt.Sprintf("Could not get pingable redis client: %v", err))
-	}
+	/*
+		if err := client.Ping().Err(); err != nil {
+			panic(fmt.Sprintf("Could not get pingable redis client: %v", err))
+		}
+	*/
 	return client
 }
 
