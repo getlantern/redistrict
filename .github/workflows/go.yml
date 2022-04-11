@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [ main ]
 
+  workflow_dispatch:
+
 jobs:
 
   build:
@@ -21,5 +23,27 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Test
-      run: go test -v ./...
+    - name: Start Redis
+      uses: supercharge/redis-github-action@1.2.0
+
+    # Install gotestfmt on the VM running the action.
+    - name: Set up gotestfmt
+      uses: haveyoudebuggedit/gotestfmt-action@v1
+      with:
+        # Optional: pass GITHUB_TOKEN to avoid rate limiting.
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    # Run tests with nice formatting. Save the original log in /tmp/gotest.log
+    - name: Run tests
+      run: |
+        set -euo pipefail
+        go test -tags test -v ./... 2>&1 | tee /tmp/gotest.log | gotestfmt
+
+    # Upload the original go test log as an artifact for later review.
+    - name: Upload test log
+      uses: actions/upload-artifact@v2
+      if: always()
+      with:
+        name: test-log
+        path: /tmp/gotest.log
+        if-no-files-found: error
