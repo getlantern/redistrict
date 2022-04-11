@@ -1,4 +1,4 @@
-[![CircleCI](https://circleci.com/gh/getlantern/redistrict.svg?style=svg)](https://circleci.com/gh/getlantern/redistrict)
+[![Go](https://github.com/getlantern/redistrict/actions/workflows/go.yml/badge.svg)](https://github.com/getlantern/redistrict/actions/workflows/go.yml)
 
 ## redistrict
 CLI utility written in Go for migrating redis data. Redistrict is particularly useful if you need
