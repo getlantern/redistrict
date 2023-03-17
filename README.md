@@ -22,7 +22,7 @@ lines as redistrict migration using the relevant scan variants.
 ### Install
 
 ```
-go get -u github.com/getlantern/redistrict
+go get github.com/getlantern/redistrict
 ```
 
 ### Synopsis
