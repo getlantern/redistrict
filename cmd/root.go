@@ -146,7 +146,7 @@ func newMigrator() *migrator {
 		tempHashes: make([]string, 0),
 		tempLists:  make([]string, 0),
 		tempSets:   make([]string, 0),
-		noProgress: false,
+		noProgress: true,
 	}
 }
 
@@ -174,9 +174,17 @@ func (m *migrator) initRedis() {
 
 	logger.Info("Connecting to destination redis")
 	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.tlsdstCert, m.tlsdst)
+	dstatus := dclient.Ping()
+	if dstatus.Err() != nil {
+		logger.Fatalf("Could not ping destination redis: %v", dstatus.Err())
+	}
 
 	logger.Info("Connecting to source redis")
 	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.tlssrcCert, m.tlssrc)
+	sstatus := sclient.Ping()
+	if sstatus.Err() != nil {
+		logger.Fatalf("Could not ping source redis: %v", sstatus.Err())
+	}
 }
 
 func (m *migrator) newClient(addr, password string, db int, certPath string, useTLS bool) *redis.Client {
