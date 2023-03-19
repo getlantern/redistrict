@@ -11,10 +11,12 @@ go install github.com/getlantern/redistrict@latest
 
 ### Run
 
-This will, for example, run redistrict with no progress bar, with TLS at the destination, and the source redis running locally. This will also **flush -- aka clear all data from -- the destination database on startup -- USE WITH CAUTION!**.
+The following example will run redistrict with no progress bar, with TLS at the destination, and the source redis running locally. 
+
+You might want to add the `--flushdst` flag to clear the destination database prior to migration (use with caution, of course, as it will **completely clear the destination database of all data**). Otherwise on multiple runs, keys will collide with keys migrated on previous runs, and the migration will abort.
 
 ```
-redistrict --noprogress --srcauth [source-password] --src 127.0.0.1:9736 --dstauth [destination-password] --dst [destination-url] --tlsdst --flushdst
+redistrict --noprogress --srcauth [source-password] --src 127.0.0.1:9736 --dstauth [destination-password] --dst [destination-url] --tlsdst
 ```
 
 ### Synopsis
