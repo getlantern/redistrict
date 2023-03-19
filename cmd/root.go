@@ -360,6 +360,7 @@ func (m *migrator) write(ch chan []string, bar progress, wg *sync.WaitGroup) {
 			if err != nil {
 				panic(fmt.Sprintf("Error reading value for key %v: %v", ktv.key, err))
 			}
+			logger.Info("Restoring key %v", ktv.key)
 			dpipeline.Restore(ktv.key, ttl, value)
 		}
 		if !dryRun {
