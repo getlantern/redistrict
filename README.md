@@ -25,6 +25,14 @@ lines as redistrict migration using the relevant scan variants.
 go install github.com/getlantern/redistrict@latest
 ```
 
+### Run
+
+This will, for example, run redistrict with no progress bar, with TLS at the destination, and the source redis running locally. This will also **flush -- aka clear all data from -- the destination database on startup -- USE WITH CAUTION!**.
+
+```
+redistrict --noprogress --srcauth [source-password] --src 127.0.0.1:9736 --dstauth [destination-password] --dst [destination-url] --tlsdst --flushdst
+```
+
 ### Synopsis
 
 A program for migrating redis databases particularly when you don't have SSH
