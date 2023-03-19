@@ -318,6 +318,7 @@ func (m *migrator) migrateKeys() {
 }
 
 func (m *migrator) write(ch chan []string, bar progress, wg *sync.WaitGroup) {
+	logger.Info("Starting write")
 	type ktv struct {
 		key      string
 		ttlCmd   *redis.DurationCmd
