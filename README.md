@@ -1,23 +1,7 @@
 [![Go Status](https://github.com/getlantern/redistrict/actions/workflows/go.yml/badge.svg)](https://github.com/getlantern/redistrict/actions/workflows/go.yml)
 
 ## redistrict
-CLI utility written in Go for migrating redis data. Redistrict is particularly useful if you need
-to migrate large values (over 512MBs) that otherwise cannot be migrated with DUMP and RESTORE.
-Redistrict migrates those "manually" using the relevant SCAN variants, such as HSCAN and SSCAN, along
-with the related bulk write methods, such as HMSET and SADD. Uses pipelining where appropriate and
-performs migrations of general keys and large keys in parallel.
-
-NOTE THIS DOES NOT CURRENTLY SUPPORT MIGRATING LARGE SORTED SETS.
-
-To find large keys in your database you can run:
-
-```
-./redis-cli --bigkeys
-```
-
-Redistrict also supports diffing two databases. This processes isn't quite as optimized as migration,
-so it's a bit slow, but unlike other options available it will work with large keys along the same
-lines as redistrict migration using the relevant scan variants.
+CLI utility written in Go for migrating redis data. 
 
 ### Install
 
@@ -34,7 +18,6 @@ redistrict --noprogress --srcauth [source-password] --src 127.0.0.1:9736 --dstau
 ```
 
 ### Synopsis
-
 A program for migrating redis databases particularly when you don't have SSH
 access to the destination machine. This uses DUMP and RESTORE for all keys except when the caller
 specifies key names of large hashes to migrate separately, as DUMP and RESTORE don't support hashes larger
@@ -60,6 +43,21 @@ The command line flags override the config file. DOES NOT CURRENTLY SUPPORT SORT
 ```
 redistrict [flags]
 ```
+
+### Finding Big Keys
+Redistrict is particularly useful if you need to migrate large values (over 512MBs) that otherwise cannot be migrated with DUMP and RESTORE. Redistrict migrates those "manually" using the relevant SCAN variants, such as HSCAN and SSCAN, along with the related bulk write methods, such as HMSET and SADD. Uses pipelining where appropriate and performs migrations of general keys and large keys in parallel.
+
+NOTE THIS DOES NOT CURRENTLY SUPPORT MIGRATING LARGE SORTED SETS.
+
+To find large keys in your database you can run:
+
+```
+./redis-cli --bigkeys
+```
+
+Redistrict also supports diffing two databases. This processes isn't quite as optimized as migration,
+so it's a bit slow, but unlike other options available it will work with large keys along the same
+lines as redistrict migration using the relevant scan variants.
 
 ### Options
 
