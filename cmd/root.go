@@ -198,8 +198,8 @@ func (m *migrator) newClient(addr, password string, db int, certPath string, use
 		Addr:         addr,
 		Password:     password,
 		DB:           db,
-		ReadTimeout:  10 * time.Minute,
-		WriteTimeout: 10 * time.Minute,
+		ReadTimeout:  30 * time.Minute,
+		WriteTimeout: 30 * time.Minute,
 		DialTimeout:  12 * time.Second,
 	}
 	if certPath != "" {
