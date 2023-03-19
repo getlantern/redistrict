@@ -174,6 +174,7 @@ func (m *migrator) initRedis() {
 
 	logger.Info("Connecting to destination redis")
 	dclient = m.newClient(m.dst, m.dstauth, m.dstdb, m.tlsdstCert, m.tlsdst)
+	logger.Info("Connected to destination redis")
 	/*
 		dstatus := dclient.Ping()
 		if dstatus.Err() != nil {
@@ -183,6 +184,7 @@ func (m *migrator) initRedis() {
 
 	logger.Info("Connecting to source redis")
 	sclient = m.newClient(m.src, m.srcauth, m.srcdb, m.tlssrcCert, m.tlssrc)
+	logger.Info("Connected to source redis")
 	/*
 		sstatus := sclient.Ping()
 		if sstatus.Err() != nil {
